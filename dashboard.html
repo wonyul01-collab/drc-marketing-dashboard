@@ -599,7 +599,7 @@ var LEDGER = (function () {
     fresh.textContent = "";
     if (!S) { fresh.textContent = state.loaded.ledger ? "통합 원장이 비어 있습니다. '데이터 넣기'에서 엑셀을 올려 주세요." : "자료를 불러오는 중입니다…"; return; }
     var up = state.uploads[0];
-    fresh.append("원장 최신일 ", el("b", { text: S.last + " " + dLabel(S.last).replace(/^[^(]+/, "") }), " · 쌓인 날짜 " + S.dates.length + "일" + (up ? " · 마지막 업로드 " + new Date(up.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""));
+    fresh.append("원장 최신일 ", el("b", { text: S.last + " " + dLabel(S.last).replace(/^[^(]+/, "") }), " · 쌓인 날짜 " + S.dates.length + "일" + (up ? " · 마지막 갱신 " + new Date(up.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) + " (" + (up.kind || "업로드") + ")" : ""));
 
     var lastDay = S.days[S.last];
     var lo = online(lastDay);
@@ -791,6 +791,12 @@ var LEDGER = (function () {
     var by = +base.slice(0, 4), bm = +base.slice(5, 7), y = +mm[1] > bm ? by - 1 : by;
     return y + "-" + String(+mm[1]).padStart(2, "0") + "-" + String(+mm[2]).padStart(2, "0");
   }
+  function webNotice() {
+    var up = state.uploads.filter(function (u) { return /자동|가져오기/.test(u.kind || ""); })[0];
+    $("sync-msg").textContent = "웹 브라우저에서는 claude.ai 보안 때문에 실적센터에 직접 접속할 수 없습니다. 대신 매일 아침 08:30에 자동으로 갱신됩니다"
+      + (up ? " (마지막 자동 갱신 " + new Date(up.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) + ", 실적센터 " + (up.to || "") + " 기준)" : "")
+      + ". 지금 바로 최신이 필요하면 Claude 데스크톱 앱에서 이 버튼을 누르거나 '데이터 넣기'에 통합 실적 엑셀을 올려 주세요.";
+  }
   async function importSiljeok() {
     var btn = $("sync-btn"), m = $("sync-msg");
     if (!db || !canWrite) { m.textContent = "이 페이지에 저장 권한이 없습니다."; return; }
@@ -828,7 +834,7 @@ var LEDGER = (function () {
     } catch (e) {
       var code = e && e.code;
       m.textContent = code === "login" ? "실적센터에 로그인되어 있지 않습니다. Claude 앱 오른쪽 브라우저 창에서 drc-siljeok.vercel.app 에 로그인한 뒤 다시 눌러 주세요."
-        : code === "server_not_connected" ? "Claude 데스크톱 앱에서 이 대시보드를 열어야 쓸 수 있습니다. 웹 브라우저에서는 엑셀 올리기를 써 주세요."
+        : code === "server_not_connected" ? (webNotice(), m.textContent)
         : code === "cancelled" || code === "approval_required" ? "허용하지 않아 멈췄습니다. 다시 누르고 허용하면 가져옵니다."
         : code === "not_in_manifest" ? "이 페이지의 내장 브라우저 사용이 꺼져 있습니다. 페이지의 권한 메뉴에서 켜 주세요."
         : code === "shape" ? "실적센터 자료 모양이 예상과 달라 읽지 못했습니다. 엑셀 올리기를 써 주세요."
@@ -1144,7 +1150,7 @@ var LEDGER = (function () {
     var user = got[3];
     if (user && user.can) { try { var w = await user.can("data.write"); if (w === false) canWrite = false; } catch (e) {} }
     var owner = user && user.isOwner ? await user.isOwner().catch(function () { return false; }) : false;
-    if (mcp && owner && db) { $("sync").hidden = false; $("sync-btn").addEventListener("click", importSiljeok); }
+    if (db && canWrite) { $("sync").hidden = false; $("sync-btn").addEventListener("click", function () { if (mcp && owner) importSiljeok(); else webNotice(); }); }
     if (!downloads) { $("dl-template").hidden = true; $("dl-ledger").hidden = true; }
     if (!db) { $("fresh").textContent = "저장 기능에 연결하지 못했습니다. 로그인 상태를 확인해 주세요."; return; }
     if (!canWrite) document.querySelectorAll("#view-data button, #view-data input, #view-data select").forEach(function (x) { x.disabled = true; });
