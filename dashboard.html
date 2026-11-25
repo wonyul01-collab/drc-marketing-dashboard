@@ -28,6 +28,10 @@ header.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 12p
 .brand h1 { font-size: 20px; font-weight: 900; margin: 0; letter-spacing: -0.02em; }
 .fresh { font-size: 13px; color: rgba(255,255,255,0.7); width: 100%; order: 3; }
 .fresh b { color: var(--cyan-light); font-weight: 500; }
+.sync { order: 4; width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: -4px; }
+.sync button { background: transparent; border-color: var(--cyan-light); color: var(--cyan-light); font-size: 15px; padding: 7px 14px; }
+.sync button:hover { background: var(--navy-light); }
+.sync span { font-size: 14px; color: rgba(255,255,255,0.85); }
 nav.tabs { display: flex; gap: 6px; }
 nav.tabs a { color: rgba(255,255,255,0.75); text-decoration: none; font-size: 16px; font-weight: 700; padding: 8px 14px; border-radius: 6px; }
 nav.tabs a:hover { color: #fff; background: var(--navy-light); }
@@ -140,6 +144,10 @@ textarea { min-height: 84px; resize: vertical; }
       <a href="#data" data-view="data">데이터 넣기</a>
     </nav>
     <p class="fresh" id="fresh">자료를 불러오는 중입니다…</p>
+    <div class="sync" id="sync" hidden>
+      <button type="button" id="sync-btn">실적센터에서 가져오기</button>
+      <span id="sync-msg" role="status"></span>
+    </div>
   </div>
 </header>
 
@@ -356,7 +364,8 @@ var LEDGER = (function () {
         sales: sales,
         orders: num(cell(rs[i], col("주문건수"))),
         adCost: num(cell(rs[i], col("광고비"))),
-        adRev: num(cell(rs[i], col("광고매출")))
+        adRev: num(cell(rs[i], col("광고매출"))),
+        asOf: base.iso
       };
     }
     // 2) 광고: 이번 달 채널별 광고비·광고매출
@@ -502,16 +511,36 @@ var LEDGER = (function () {
   function msg(box, kind, text) { box.hidden = false; box.className = "msg " + kind; box.textContent = text; }
 
   /* ---------- 원장 계산 ---------- */
+  /* 날짜마다: 실적센터 엑셀(center)과 실적센터 가져오기(siljeok) 중 더 최신 기준일 자료를 쓰고,
+     직접 올린 CSV(csv)는 그 위에 더한다. 광고매출·주문수는 값이 있는 가장 최신 자료에서 가져온다. */
   function allDays() {
-    var days = {};
+    var base = {}, extra = [];
     Object.keys(state.ledger).forEach(function (id) {
-      var doc = state.ledger[id];
+      var doc = state.ledger[id], src = doc.source || id.split("_")[0];
       Object.keys(doc.days || {}).forEach(function (d) {
-        var src = doc.days[d], t = days[d] = days[d] || { sales: {}, orders: 0, adCost: 0, adRev: 0, adByCh: {} };
-        Object.keys(src.sales || {}).forEach(function (ch) { t.sales[ch] = (t.sales[ch] || 0) + (src.sales[ch] || 0); });
-        t.orders += src.orders || 0; t.adCost += src.adCost || 0; t.adRev += src.adRev || 0;
-        Object.keys(src.adByCh || {}).forEach(function (ch) { var a = t.adByCh[ch] = t.adByCh[ch] || { cost: 0, rev: 0 }; a.cost += src.adByCh[ch].cost || 0; a.rev += src.adByCh[ch].rev || 0; });
+        var day = doc.days[d];
+        if (src === "csv") extra.push([d, day]);
+        else (base[d] = base[d] || []).push({ src: src, asOf: day.asOf || "", day: day });
       });
+    });
+    var days = {};
+    function blank() { return { sales: {}, orders: 0, adCost: 0, adRev: 0, adByCh: {}, adRevKnown: false }; }
+    Object.keys(base).forEach(function (d) {
+      var c = base[d].sort(function (a, b) { return a.asOf === b.asOf ? (a.src === "center" ? -1 : 1) : (a.asOf < b.asOf ? 1 : -1); });
+      var t = days[d] = blank(), top = c[0].day;
+      Object.keys(top.sales || {}).forEach(function (ch) { t.sales[ch] = top.sales[ch] || 0; });
+      t.adCost = top.adCost || 0;
+      var r = c.filter(function (x) { return typeof x.day.adRev === "number"; })[0];
+      if (r) { t.adRev = r.day.adRev; t.adRevKnown = true; }
+      var o = c.filter(function (x) { return typeof x.day.orders === "number"; })[0];
+      if (o) t.orders = o.day.orders;
+    });
+    extra.forEach(function (e) {
+      var d = e[0], src = e[1], t = days[d] = days[d] || blank();
+      Object.keys(src.sales || {}).forEach(function (ch) { t.sales[ch] = (t.sales[ch] || 0) + (src.sales[ch] || 0); });
+      t.orders += src.orders || 0; t.adCost += src.adCost || 0;
+      if (typeof src.adRev === "number") { t.adRev += src.adRev; t.adRevKnown = t.adRevKnown || src.adRev > 0 || !t.adCost; }
+      Object.keys(src.adByCh || {}).forEach(function (ch) { var a = t.adByCh[ch] = t.adByCh[ch] || { cost: 0, rev: 0 }; a.cost += src.adByCh[ch].cost || 0; a.rev += src.adByCh[ch].rev || 0; });
     });
     return days;
   }
@@ -591,15 +620,15 @@ var LEDGER = (function () {
       el("span", { class: "d", text: "이번 달 누계 " + wonShort(S.mAd) })
     ]));
     // 3 ROAS
-    var roas = lastDay.adCost ? lastDay.adRev / lastDay.adCost * 100 : NaN;
+    var roas = lastDay.adCost && lastDay.adRevKnown ? lastDay.adRev / lastDay.adCost * 100 : NaN;
     var g = grade(roas, be().all);
-    var r7c = 0, r7r = 0;
-    for (var i = 0; i < 7; i++) { var dd = S.days[addDays(S.last, -i)]; if (dd) { r7c += dd.adCost; r7r += dd.adRev; } }
+    var r7c = 0, r7r = 0, r7n = 0;
+    for (var i = 0; i < 7; i++) { var dd = S.days[addDays(S.last, -i)]; if (dd && dd.adRevKnown) { r7c += dd.adCost; r7r += dd.adRev; r7n++; } }
     cards.append(el("div", { class: "card " + (g === "none" ? "" : g) }, [
       el("span", { class: "k", text: "최근일 광고 ROAS · " + dLabel(S.last) }),
       el("span", { class: "v", text: isFinite(roas) ? pct(roas) : "—" }),
       el("span", { class: "pill " + g, text: GRADE_TEXT[g] + " (기준 " + pct(be().all) + ")" }),
-      el("span", { class: "d", text: "최근 7일 " + (r7c ? pct(r7r / r7c * 100) : "—") + " · 하루치는 흔들리니 7일도 함께 보세요" })
+      el("span", { class: "d", text: "최근 7일 " + (r7c ? pct(r7r / r7c * 100) : "—") + (r7n && r7n < 7 ? " (광고매출 있는 " + r7n + "일)" : "") + " · 하루치는 흔들리니 7일도 함께 보세요" })
     ]));
     // 4 MER
     var spend = S.mAd + S.mOther;
@@ -741,6 +770,73 @@ var LEDGER = (function () {
     msg(box, "good", name + " 저장 완료 · " + (P.kind === "center" ? "통합 실적 엑셀" : "원장 CSV") + " · 날짜 " + dayDates.length + "일(" + (dayDates[0] || "-") + " ~ " + (dayDates[dayDates.length - 1] || "-") + ")" + (prodCount ? " · 제품 " + prodCount.toLocaleString("ko-KR") + "행" : "") + (P.adMonth ? " · 채널 광고 " + P.adMonth.rows.length + "개" : "") + (P.skipped ? " · 날짜·채널이 비어 건너뛴 줄 " + P.skipped + "개" : "") + ". 같은 날짜는 새 숫자로 덮어썼습니다.");
   }
 
+  /* ---------- 실적센터에서 가져오기 ----------
+     Claude 데스크톱 앱의 내장 브라우저(로그인된 상태)로 실적센터가 화면에 쓰는 자료 파일을 읽는다.
+     kpi.json: 최근 30일 날짜별 채널 매출(B2B 포함)·광고비 / mkt.json: 기준일 광고매출, 이번 달 채널별 광고 */
+  var SILJEOK = "https://drc-siljeok.vercel.app", HOST = "host:claude_browser", mcp = null;
+  function resultText(res) {
+    if (res && typeof res.payload === "string") return res.payload;
+    var t = ((res && res.content) || []).filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; }).join("\n");
+    return t || JSON.stringify((res && res.payload) || "");
+  }
+  async function browserJson(path) {
+    await mcp.callTool(HOST, "navigate", { url: SILJEOK + path }, { cache: false });
+    var res = await mcp.callTool(HOST, "get_page_text", { max_chars: 400000 }, { cache: false });
+    var text = resultText(res), i = text.indexOf("{"), j = text.lastIndexOf("}");
+    if (i < 0 || j < i || /login/i.test(text.slice(0, i))) throw { code: "login" };
+    try { return JSON.parse(text.slice(i, j + 1)); } catch (e) { throw { code: "shape" }; }
+  }
+  function isoFromMD(lab, base) {
+    var mm = String(lab).match(/(\d{1,2})\/(\d{1,2})/); if (!mm) return null;
+    var by = +base.slice(0, 4), bm = +base.slice(5, 7), y = +mm[1] > bm ? by - 1 : by;
+    return y + "-" + String(+mm[1]).padStart(2, "0") + "-" + String(+mm[2]).padStart(2, "0");
+  }
+  async function importSiljeok() {
+    var btn = $("sync-btn"), m = $("sync-msg");
+    if (!db || !canWrite) { m.textContent = "이 페이지에 저장 권한이 없습니다."; return; }
+    btn.disabled = true; m.textContent = "실적센터 자료를 읽는 중입니다… 처음 한 번은 허용 창이 뜹니다.";
+    try {
+      var kpi = await browserJson("/data/kpi.json");
+      var mkt = await browserJson("/data/mkt.json");
+      var base = kpi.base, tr = kpi.brief && kpi.brief.trend;
+      if (!base || !tr || !tr.days || !tr.series) throw { code: "shape" };
+      var days = {};
+      tr.days.forEach(function (lab, i) {
+        var iso = isoFromMD(lab, base); if (!iso) return;
+        var sales = {}; tr.series.forEach(function (s) { sales[s.name] = L.num(s.values[i]); });
+        days[iso] = { sales: sales, adCost: L.num((tr.ad || [])[i]), asOf: base };
+      });
+      var p0 = ((mkt.glance && mkt.glance.periods) || []).filter(function (p) { return p.key === "day"; })[0];
+      if (p0 && mkt.base === base && days[base]) days[base].adRev = L.num(p0.ad_rev);
+      var lm = L.byMonth(days), months = Object.keys(lm);
+      for (var k = 0; k < months.length; k++) {
+        var ref = db.doc("ledger/siljeok_" + months[k]), cur = await ref.get();
+        await ref.set({ source: "siljeok", month: months[k], days: L.mergeDays(cur.exists ? cur.data().days : {}, lm[months[k]]), updatedAt: new Date().toISOString(), file: "실적센터 kpi.json · mkt.json" });
+      }
+      var pm = mkt.channel && mkt.channel.profit_month, pr = pm && String(pm.period || "").match(/(\d{1,2}\/\d{1,2})~(\d{1,2}\/\d{1,2})/);
+      if (pr && pm["네이버"] && pm["쿠팡"]) {
+        var from = isoFromMD(pr[1], base), to = isoFromMD(pr[2], base), aref = db.doc("admonth/" + from.slice(0, 7)), acur = await aref.get();
+        if (!acur.exists || (acur.data().to || "") < to) {
+          await aref.set({ month: from.slice(0, 7), from: from, to: to, updatedAt: new Date().toISOString(), file: "실적센터 mkt.json", rows: [
+            { channel: "스마트스토어", source: "네이버광고", cost: L.num(pm["네이버"].cost), rev: L.num(pm["네이버"].rev) },
+            { channel: "쿠팡 로켓배송", source: "쿠팡광고(윙 포함)", cost: L.num(pm["쿠팡"].cost), rev: L.num(pm["쿠팡"].rev) }] });
+        }
+      }
+      var ds = Object.keys(days).sort();
+      await db.collection("uploads").add({ file: "실적센터 자동 가져오기 (" + (mkt.at || kpi.base) + " 기준)", kind: "실적센터 가져오기", from: ds[0], to: ds[ds.length - 1], days: ds.length, products: 0, at: new Date().toISOString() });
+      m.textContent = "가져왔습니다 · " + base + " 기준 최근 " + ds.length + "일" + (mkt.at ? " (실적센터 " + mkt.at + " 갱신분)" : "") + ". 제품별 숫자는 통합 실적 엑셀을 올리면 들어옵니다.";
+    } catch (e) {
+      var code = e && e.code;
+      m.textContent = code === "login" ? "실적센터에 로그인되어 있지 않습니다. Claude 앱 오른쪽 브라우저 창에서 drc-siljeok.vercel.app 에 로그인한 뒤 다시 눌러 주세요."
+        : code === "server_not_connected" ? "Claude 데스크톱 앱에서 이 대시보드를 열어야 쓸 수 있습니다. 웹 브라우저에서는 엑셀 올리기를 써 주세요."
+        : code === "cancelled" || code === "approval_required" ? "허용하지 않아 멈췄습니다. 다시 누르고 허용하면 가져옵니다."
+        : code === "not_in_manifest" ? "이 페이지의 내장 브라우저 사용이 꺼져 있습니다. 페이지의 권한 메뉴에서 켜 주세요."
+        : code === "shape" ? "실적센터 자료 모양이 예상과 달라 읽지 못했습니다. 엑셀 올리기를 써 주세요."
+        : code === "quota_exceeded" ? "저장 공간이 가득 찼습니다. 오래된 작업 기록을 지워 주세요."
+        : "가져오지 못했습니다 (" + (code || "알 수 없는 오류") + "). 잠시 뒤 다시 눌러 주세요.";
+    } finally { btn.disabled = false; }
+  }
+
   /* ---------- 내려받기 ---------- */
   function csvCell(v) { var s = v === null || v === undefined ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   async function save(filename, text, statusEl) {
@@ -786,7 +882,7 @@ var LEDGER = (function () {
     lines.push("[기준] 원장 최신일 " + S.last + ". 매출은 온라인 채널 합계(B2B·오프라인 제외). 광고비·광고매출은 쿠팡 광고+네이버 검색광고 합계. 쿠팡 로켓배송 매출은 우리 공급액, 쿠팡 광고매출은 소비자 판매액(14일 전환)이라 기준이 다름.");
     lines.push("[손익분기 ROAS] 전체 " + be().all + "% · 네이버/스마트스토어 " + be().naver + "% · 쿠팡 " + be().coupang + "% (이 아래면 광고할수록 손해)");
     lines.push("[최근 30일 일별] 날짜,온라인매출,주문수,광고비,광고매출,ROAS%");
-    for (var i = 29; i >= 0; i--) { var d = addDays(S.last, -i), x = S.days[d]; if (x) lines.push([d, Math.round(online(x)), x.orders, Math.round(x.adCost), Math.round(x.adRev), x.adCost ? Math.round(x.adRev / x.adCost * 100) : ""].join(",")); }
+    for (var i = 29; i >= 0; i--) { var d = addDays(S.last, -i), x = S.days[d]; if (x) lines.push([d, Math.round(online(x)), x.orders, Math.round(x.adCost), x.adRevKnown ? Math.round(x.adRev) : "자료없음", x.adCost && x.adRevKnown ? Math.round(x.adRev / x.adCost * 100) : ""].join(",")); }
     var T = channelTable(S);
     lines.push("[" + S.month + " 채널별] 채널,매출,광고비,광고매출,ROAS%,기타마케팅비" + (T.am ? " (채널 광고 기간 " + T.am.from + "~" + T.am.to + ")" : ""));
     T.rows.forEach(function (r) { lines.push([r.ch, Math.round(r.sales), Math.round(r.adCost), Math.round(r.adRev), r.adCost ? Math.round(r.adRev / r.adCost * 100) : "", Math.round(r.other)].join(",")); });
@@ -1043,10 +1139,12 @@ var LEDGER = (function () {
   async function start() {
     route(); wireForms(); renderSettings(); renderAll();
     if (!window.claude || !window.claude.use) { $("fresh").textContent = "claude.ai 안에서 열어야 자료가 저장되고 클로드 작업을 쓸 수 있습니다."; return; }
-    var got = await Promise.all([claude.use("db"), claude.use("sample"), claude.use("downloads"), claude.use("user")]);
-    db = got[0]; sample = got[1]; downloads = got[2];
+    var got = await Promise.all([claude.use("db"), claude.use("sample"), claude.use("downloads"), claude.use("user"), claude.use("mcp")]);
+    db = got[0]; sample = got[1]; downloads = got[2]; mcp = got[4];
     var user = got[3];
     if (user && user.can) { try { var w = await user.can("data.write"); if (w === false) canWrite = false; } catch (e) {} }
+    var owner = user && user.isOwner ? await user.isOwner().catch(function () { return false; }) : false;
+    if (mcp && owner && db) { $("sync").hidden = false; $("sync-btn").addEventListener("click", importSiljeok); }
     if (!downloads) { $("dl-template").hidden = true; $("dl-ledger").hidden = true; }
     if (!db) { $("fresh").textContent = "저장 기능에 연결하지 못했습니다. 로그인 상태를 확인해 주세요."; return; }
     if (!canWrite) document.querySelectorAll("#view-data button, #view-data input, #view-data select").forEach(function (x) { x.disabled = true; });

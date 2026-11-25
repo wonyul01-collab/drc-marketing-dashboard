@@ -6,6 +6,8 @@ https://claude.ai/artifact/1uVDbPYmVYdpWYJNNGXHaK (2026-11-25 게시, 비공개)
 - 화면 원본: `dashboard.html`. 고친 뒤 같은 주소로 다시 게시한다.
 - 숫자는 아티팩트 저장소(db)에만 있다. 컬렉션: `ledger`(날짜별 채널 매출·광고비, 월 단위 문서 `center_YYYY-MM`/`csv_YYYY-MM`), `products`(상품원본), `admonth`(이번 달 채널별 광고), `costs`, `promos`, `tasks`, `uploads`, `settings/main`(손익분기).
 - 주 입력 파일: 실적센터 '디알컴퍼니 통합 실적' 엑셀(report.xlsx). 시트 `일실적·추이`·`광고`·`상품원본`을 읽는다. 마케팅 상황실 PC의 `data\raw\<날짜>\report.xlsx`와 같은 파일.
+- '실적센터에서 가져오기' 버튼: Claude 데스크톱 앱 내장 브라우저(`host:claude_browser`, navigate·get_page_text)로 로그인된 실적센터의 `/data/kpi.json`(brief.trend: 30일 채널 매출·광고비)과 `/data/mkt.json`(기준일 광고매출 glance.periods, 이번 달 채널 광고 channel.profit_month)을 읽어 `ledger/siljeok_YYYY-MM`에 쌓는다. 날짜마다 기준일(asOf)이 최신인 자료를 쓰고, 광고매출은 값이 있는 최신 자료에서 쓴다. 데스크톱 앱에서 소유자만 쓸 수 있다.
+- 실적센터 통합실적 엑셀은 `/data/status.json`의 reports[0].file(예: report_1.xlsx)에 있다(로그인 필요).
 - 날짜별 채널 광고비는 원본에 없어 30일 그래프 광고비는 쿠팡+네이버 합계 한 줄이다.
 - 손익분기 기본값: 전체 260.5%(실적센터 잠정), 네이버 169.5%, 쿠팡 400.5%(상황실 원가표, 2026-11-17).
 
