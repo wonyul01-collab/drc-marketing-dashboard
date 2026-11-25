@@ -1,0 +1,1057 @@
+<title>디알컴퍼니 마케팅 대시보드</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* 레이아웃: 남색 머리띠 + 탭 3개(현황·작업·데이터 넣기). 큰 숫자 카드 → 그래프 → 표 순서. DR Company 디자인 시스템 색·글꼴 사용 */
+:root {
+  --navy: #0f1c2e; --navy-light: #1a2d45; --blue: #1a56db; --cyan-light: #67e8f9; --amber: #f59e0b;
+  --bg: #f8fafc; --card: #ffffff; --line: #e2e8f0; --line-soft: #f1f5f9;
+  --text: #0f172a; --text-2: #475569; --muted: #64748b;
+  --good: #15803d; --good-bg: #f0fdf4; --good-line: #bbf7d0;
+  --warn: #92400e; --warn-bg: #fff7ed; --warn-line: #fed7aa;
+  --bad: #be123c; --bad-bg: #fff1f2; --bad-line: #fecdd3;
+  --sales: #1a56db; --sales-fill: rgba(26,86,219,0.10); --adcost: #d97706;
+  --font-sans: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 15px; line-height: 1.7; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--navy); }
+.wrap { max-width: 1200px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { background: var(--navy); color: #fff; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+header.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-block: 14px; }
+.brand { display: flex; align-items: center; gap: 12px; margin-right: auto; }
+.badge { font-family: var(--font-mono); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; background: var(--blue); color: #fff; padding: 2px 8px; border-radius: 4px; }
+.brand h1 { font-size: 20px; font-weight: 900; margin: 0; letter-spacing: -0.02em; }
+.fresh { font-size: 13px; color: rgba(255,255,255,0.7); width: 100%; order: 3; }
+.fresh b { color: var(--cyan-light); font-weight: 500; }
+nav.tabs { display: flex; gap: 6px; }
+nav.tabs a { color: rgba(255,255,255,0.75); text-decoration: none; font-size: 16px; font-weight: 700; padding: 8px 14px; border-radius: 6px; }
+nav.tabs a:hover { color: #fff; background: var(--navy-light); }
+nav.tabs a[aria-current="page"] { color: var(--navy); background: #fff; }
+nav.tabs a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+main { padding-block: 24px 64px; }
+section.view { display: grid; gap: 24px; }
+h2 { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+h3 { font-size: 17px; font-weight: 700; margin: 0; }
+.label { font-family: var(--font-mono); font-size: 13px; font-weight: 600; letter-spacing: 0.12em; color: var(--blue); text-transform: uppercase; }
+.sub { color: var(--text-2); font-size: 15px; margin: 4px 0 0; }
+.note { color: var(--muted); font-size: 13px; margin: 0; }
+.panel { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 20px 22px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 14px; }
+.panel-head .note { margin-left: auto; }
+
+/* 숫자 카드 */
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 960px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .cards { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 18px 20px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.card .k { font-size: 15px; font-weight: 700; color: var(--text-2); }
+.card .v { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.card .d { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card.good { border-color: var(--good-line); background: var(--good-bg); }
+.card.good .v { color: var(--good); }
+.card.warn { border-color: var(--warn-line); background: var(--warn-bg); }
+.card.warn .v { color: var(--warn); }
+.card.bad { border-color: var(--bad-line); background: var(--bad-bg); }
+.card.bad .v { color: var(--bad); }
+.pill { display: inline-block; font-size: 13px; font-weight: 700; padding: 1px 10px; border-radius: 999px; border: 1px solid currentColor; justify-self: start; }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.none { color: var(--muted); }
+
+/* 그래프 */
+.legend { display: flex; gap: 16px; font-size: 14px; color: var(--text-2); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: var(--c); }
+.chart-box { position: relative; }
+.chart-box svg { width: 100%; height: auto; display: block; }
+.chart-box svg text { font-family: var(--font-sans); font-size: 13px; fill: var(--muted); }
+.tip { position: absolute; pointer-events: none; background: var(--navy); color: #fff; font-size: 14px; padding: 8px 12px; border-radius: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* 표 */
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { font-size: 14px; color: var(--text-2); font-weight: 700; background: var(--line-soft); }
+th:first-child, td:first-child { text-align: left; }
+tr.total td { font-weight: 700; border-top: 2px solid var(--text); }
+tr.dim td { color: var(--muted); }
+td .pill { margin-left: 6px; }
+td.txt, th.txt { text-align: left; white-space: normal; }
+
+/* 버튼·입력 */
+button, .btn { font-family: inherit; font-size: 15px; font-weight: 700; border-radius: 8px; border: 1.5px solid var(--blue); background: var(--blue); color: #fff; padding: 10px 18px; cursor: pointer; }
+button.ghost { background: #fff; color: var(--blue); }
+button.danger { background: #fff; color: var(--bad); border-color: var(--bad-line); }
+button.small { font-size: 14px; padding: 5px 12px; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 14px; align-items: end; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field label { font-size: 14px; font-weight: 700; color: var(--text-2); }
+input, select, textarea { font-family: inherit; font-size: 15px; color: var(--text); background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 9px 11px; width: 100%; min-width: 0; }
+textarea { min-height: 84px; resize: vertical; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.msg { font-size: 15px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--line-soft); }
+.msg.good { background: var(--good-bg); border-color: var(--good-line); color: var(--good); }
+.msg.bad { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+.msg.warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+.empty { text-align: center; padding: 28px 16px; color: var(--text-2); border: 1.5px dashed var(--line); border-radius: 14px; background: var(--card); }
+.empty strong { display: block; font-size: 17px; color: var(--text); margin-bottom: 4px; }
+
+/* 업로드 */
+.drop { border: 2px dashed var(--blue); border-radius: 14px; background: #f5f8ff; padding: 28px 16px; text-align: center; display: grid; gap: 8px; justify-items: center; }
+.drop.over { background: #e8efff; }
+.drop strong { font-size: 18px; }
+
+/* 작업 */
+.task-btns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .task-btns { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.task-btn { background: #fff; color: var(--text); border: 1.5px solid var(--line); text-align: left; padding: 16px 18px; display: grid; gap: 4px; border-radius: 14px; }
+.task-btn b { font-size: 17px; }
+.task-btn span { font-size: 14px; font-weight: 400; color: var(--text-2); }
+.task-btn[aria-pressed="true"] { border-color: var(--blue); box-shadow: inset 0 0 0 1.5px var(--blue); background: #f5f8ff; }
+.result { border: 1.5px solid var(--line); border-radius: 12px; padding: 18px 20px; background: #fff; display: grid; gap: 6px; max-width: 80ch; }
+.result h4 { font-size: 17px; margin: 10px 0 0; }
+.result p, .result li { margin: 0; }
+.result ul { margin: 0; padding-left: 22px; display: grid; gap: 2px; }
+.thinking { color: var(--muted); }
+.history { display: grid; gap: 10px; }
+.history details { border: 1.5px solid var(--line); border-radius: 12px; background: #fff; }
+.history summary { cursor: pointer; padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.history summary b { font-size: 16px; }
+.history .body { padding: 0 16px 16px; display: grid; gap: 12px; }
+.list { display: grid; gap: 0; }
+.list-item { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.list-item .grow { flex: 1 1 220px; min-width: 0; }
+.list-item .amt { font-weight: 700; font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: no-preference) { .card, .panel { transition: border-color .2s; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="badge">DR Company</span><h1>마케팅 대시보드</h1></div>
+    <nav class="tabs" aria-label="화면 선택">
+      <a href="#status" data-view="status">현황</a>
+      <a href="#tasks" data-view="tasks">작업</a>
+      <a href="#data" data-view="data">데이터 넣기</a>
+    </nav>
+    <p class="fresh" id="fresh">자료를 불러오는 중입니다…</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- 현황 -->
+  <section class="view" id="view-status" aria-labelledby="h-status">
+    <h2 id="h-status" hidden>현황</h2>
+    <div id="status-empty" class="empty" hidden>
+      <strong>아직 쌓인 실적이 없습니다</strong>
+      '데이터 넣기'에서 실적센터의 <b>통합 실적 엑셀</b>을 올리면 숫자 카드와 그래프가 채워집니다.
+    </div>
+    <div id="status-body">
+      <div class="cards" id="cards">
+        <div class="card"><span class="k">최근일 온라인 매출</span><span class="v">—</span></div>
+        <div class="card"><span class="k">최근일 광고비</span><span class="v">—</span></div>
+        <div class="card"><span class="k">최근일 광고 ROAS</span><span class="v">—</span></div>
+        <div class="card"><span class="k">이번 달 MER</span><span class="v">—</span></div>
+      </div>
+    </div>
+    <div class="panel" id="chart-panel">
+      <div class="panel-head">
+        <h3>최근 30일 매출 · 광고비</h3>
+        <div class="legend"><span style="--c: var(--sales)">온라인 매출</span><span style="--c: var(--adcost)">광고비 (쿠팡+네이버 합계)</span></div>
+        <p class="note" id="chart-note"></p>
+      </div>
+      <div class="chart-box" id="chart"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3 id="table-title">이번 달 채널별 비용 대비 매출</h3>
+        <p class="note" id="table-period"></p>
+      </div>
+      <div class="table-scroll"><table id="ch-table"></table></div>
+      <p class="note" style="margin-top:10px">ROAS = 광고매출 ÷ 광고비. 색은 채널별 손익분기(네이버·스마트스토어 <span id="be-n">169.5</span>%, 쿠팡 <span id="be-c">400.5</span>%) 기준입니다. 쿠팡 로켓배송 매출은 우리 공급액이고, 광고매출은 소비자 판매액이라 기준이 다릅니다. '비용 대비 매출' = 채널 매출 ÷ (광고비 + 기타 마케팅 비용).</p>
+    </div>
+  </section>
+
+  <!-- 작업 -->
+  <section class="view" id="view-tasks" aria-labelledby="h-tasks" hidden>
+    <div>
+      <span class="label">Claude 작업</span>
+      <h2 id="h-tasks">무엇을 맡길까요?</h2>
+      <p class="sub">버튼을 고르고 제품·목표를 적으면, 통합 원장 숫자를 함께 넘겨 클로드가 이 페이지 안에서 작성합니다. 결과는 아래 작업 기록에 저장됩니다.</p>
+    </div>
+    <div class="task-btns" id="task-btns"></div>
+    <form class="panel" id="task-form" hidden>
+      <div class="panel-head"><h3 id="task-form-title"></h3><p class="note">치료·개선·예방·의사 추천 같은 의료기기·의약외품 과장 표현은 쓰지 않도록 함께 지시합니다.</p></div>
+      <div class="form">
+        <div class="field"><label for="t-product">제품</label><input id="t-product" list="product-list" placeholder="예: 샐리브 안심퀸 프리미엄 (비우면 전체)"></div>
+        <div class="field"><label for="t-goal">목표</label><input id="t-goal" placeholder="예: 쿠팡 ROAS를 손익분기 이상으로"></div>
+        <div class="field wide"><label for="t-extra">추가 요청</label><textarea id="t-extra" placeholder="예: 50~60대 여성 고객 말투로, 3가지 안으로"></textarea></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button type="submit" id="t-run">클로드에게 맡기기</button>
+        <button type="button" class="ghost" id="t-stop" hidden>멈추기</button>
+        <span class="note" id="t-status"></span>
+      </div>
+      <div id="t-out" style="margin-top:16px" hidden></div>
+    </form>
+    <div class="panel">
+      <div class="panel-head"><h3>작업 기록</h3><p class="note" id="task-count"></p></div>
+      <div class="history" id="history"></div>
+    </div>
+  </section>
+
+  <!-- 데이터 넣기 -->
+  <section class="view" id="view-data" aria-labelledby="h-data" hidden>
+    <div>
+      <span class="label">Data</span>
+      <h2 id="h-data">데이터 넣기</h2>
+      <p class="sub">올린 파일과 입력한 비용은 하나의 통합 원장에 쌓입니다. 같은 날짜를 다시 올리면 새 파일 숫자로 덮어씁니다.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>1. 엑셀 · CSV 올리기</h3></div>
+      <label class="drop" id="drop" for="file-in">
+        <strong>여기로 파일을 끌어다 놓거나 눌러서 고르세요</strong>
+        <span>실적센터 <b>통합 실적 엑셀</b>(report.xlsx) 또는 원장 양식 CSV</span>
+        <input type="file" id="file-in" accept=".xlsx,.xls,.csv" multiple hidden>
+      </label>
+      <div id="up-msg" style="margin-top:12px" hidden></div>
+      <div class="row" style="margin-top:12px">
+        <button type="button" class="ghost small" id="dl-template">원장 양식 CSV 받기</button>
+        <button type="button" class="ghost small" id="dl-ledger">통합 원장 내려받기 (CSV)</button>
+      </div>
+      <details style="margin-top:14px">
+        <summary>최근 올린 파일</summary>
+        <div class="list" id="upload-list"></div>
+      </details>
+    </div>
+
+    <div class="two">
+      <form class="panel" id="cost-form">
+        <div class="panel-head"><h3>2. 마케팅 비용 입력</h3></div>
+        <p class="note" style="margin-bottom:12px">광고비(쿠팡·네이버)는 엑셀에서 자동으로 들어옵니다. 체험단·협찬·외주처럼 그 밖의 비용만 적어 주세요.</p>
+        <div class="form">
+          <div class="field"><label for="c-date">날짜</label><input type="date" id="c-date" required></div>
+          <div class="field"><label for="c-channel">채널</label><select id="c-channel"></select></div>
+          <div class="field"><label for="c-kind">비용유형</label><select id="c-kind"></select></div>
+          <div class="field"><label for="c-product">제품</label><input id="c-product" list="product-list" placeholder="비우면 전체"></div>
+          <div class="field"><label for="c-amount">금액 (원)</label><input id="c-amount" inputmode="numeric" placeholder="예: 300000" required></div>
+          <div class="field wide"><label for="c-memo">메모</label><input id="c-memo" placeholder="예: 11월 체험단 20명"></div>
+        </div>
+        <div class="row" style="margin-top:14px"><button type="submit" id="c-save">비용 저장</button><span class="note" id="c-status"></span></div>
+        <h3 style="margin-top:20px">이번 달 입력한 비용</h3>
+        <div class="list" id="cost-list"></div>
+      </form>
+
+      <form class="panel" id="promo-form">
+        <div class="panel-head"><h3>3. 진행 중 홍보 목록</h3></div>
+        <div class="form">
+          <div class="field wide"><label for="p-name">홍보명</label><input id="p-name" placeholder="예: 겨울 체험단 2기" required></div>
+          <div class="field"><label for="p-channel">채널</label><select id="p-channel"></select></div>
+          <div class="field"><label for="p-product">제품</label><input id="p-product" list="product-list" placeholder="비우면 전체"></div>
+          <div class="field"><label for="p-start">시작일</label><input type="date" id="p-start" required></div>
+          <div class="field"><label for="p-monthly">월 비용 (원)</label><input id="p-monthly" inputmode="numeric" placeholder="예: 500000"></div>
+          <div class="field"><label for="p-owner">담당</label><input id="p-owner" placeholder="예: 김대리"></div>
+        </div>
+        <div class="row" style="margin-top:14px"><button type="submit" id="p-save">홍보 추가</button><span class="note" id="p-status"></span></div>
+        <p class="note" style="margin-top:10px">월 비용은 목록에 보여 주기만 합니다. MER에 넣으려면 실제 쓴 금액을 왼쪽 '마케팅 비용 입력'에 적어 주세요.</p>
+        <div class="list" id="promo-list" style="margin-top:8px"></div>
+      </form>
+    </div>
+
+    <form class="panel" id="be-form">
+      <div class="panel-head"><h3>4. 손익분기 ROAS 기준</h3><p class="note">2026-11-17 마케팅 상황실 원가표 계산값. 바꾸면 카드·표 색이 바로 바뀝니다.</p></div>
+      <div class="form">
+        <div class="field"><label for="be-all">전체(카드용) %</label><input id="be-all" inputmode="decimal"></div>
+        <div class="field"><label for="be-naver">네이버·스마트스토어 %</label><input id="be-naver" inputmode="decimal"></div>
+        <div class="field"><label for="be-coupang">쿠팡 %</label><input id="be-coupang" inputmode="decimal"></div>
+        <div class="field"><button type="submit" id="be-save">기준 저장</button></div>
+      </div>
+      <p class="note" style="margin-top:10px" id="be-status">전체 260.5%는 실적센터 잠정 기준입니다. 쿠팡 기준이 260%와 399% 중 무엇이 맞는지는 아직 확인되지 않았습니다.</p>
+    </form>
+  </section>
+  <datalist id="product-list"></datalist>
+</main>
+
+<script id="parser">
+/* ===== 엑셀 → 통합 원장 변환 (화면과 시험 스크립트가 함께 쓰는 순수 함수) ===== */
+var LEDGER = (function () {
+  var CHANNELS = ["스마트스토어", "쿠팡 로켓배송", "쿠팡 판매자(윙)", "자사몰(카페24)", "기타 온라인", "B2B·오프라인"];
+  var OFFLINE = "B2B·오프라인";
+  function num(v) {
+    if (v === null || v === undefined || v === "") return 0;
+    if (typeof v === "number") return isFinite(v) ? v : 0;
+    var s = String(v).replace(/[,원\s]/g, "");
+    var n = parseFloat(s);
+    return isFinite(n) ? n : 0;
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function serialToISO(serial) {
+    var ms = Math.round((serial - 25569) * 86400000);
+    var d = new Date(ms);
+    return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
+  }
+  function toISO(v) {
+    if (typeof v === "number" && v > 20000 && v < 80000) return serialToISO(v);
+    if (v instanceof Date && !isNaN(v)) return v.getFullYear() + "-" + pad(v.getMonth() + 1) + "-" + pad(v.getDate());
+    var s = String(v || "").trim();
+    var m = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+    if (m) return m[1] + "-" + pad(+m[2]) + "-" + pad(+m[3]);
+    m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (m) return m[1] + "-" + m[2] + "-" + m[3];
+    return null;
+  }
+  function rows(wb, name) {
+    var ws = wb.Sheets[name];
+    if (!ws) return null;
+    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true });
+  }
+  function cell(r, i) { return r && r[i] !== undefined ? r[i] : null; }
+  function str(v) { return v === null || v === undefined ? "" : String(v).trim(); }
+
+  function isCenter(wb) { return !!(wb.Sheets["일실적·추이"] && wb.Sheets["광고"]); }
+
+  function baseDateOf(wb) {
+    var names = ["요약", "일실적·추이"];
+    for (var i = 0; i < names.length; i++) {
+      var rs = rows(wb, names[i]) || [];
+      for (var j = 0; j < Math.min(rs.length, 5); j++) {
+        var m = str(cell(rs[j], 0)).match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return { y: +m[1], m: +m[2], d: +m[3], iso: m[0] };
+      }
+    }
+    return null;
+  }
+  function mdToISO(label, base) {
+    var m = str(label).match(/^(\d{1,2})\/(\d{1,2})/);
+    if (!m) return null;
+    var mm = +m[1], dd = +m[2], y = base.y;
+    if (mm > base.m) y -= 1;
+    return y + "-" + pad(mm) + "-" + pad(dd);
+  }
+
+  /* 실적센터 '디알컴퍼니 통합 실적' 엑셀 */
+  function parseCenter(wb) {
+    var base = baseDateOf(wb);
+    if (!base) throw new Error("기준일을 찾지 못했습니다. '요약' 시트 둘째 줄에 '기준일 2026-11-16' 같은 글이 있어야 합니다.");
+    var out = { kind: "center", base: base.iso, days: {}, products: {}, adMonth: null };
+    // 1) 일실적·추이: 날짜별 채널 매출·광고비 합계
+    var rs = rows(wb, "일실적·추이");
+    var h = -1;
+    for (var i = 0; i < rs.length; i++) { if (str(cell(rs[i], 0)) === "구간" && rs[i].indexOf("스마트스토어") >= 0) { h = i; break; } }
+    if (h < 0) throw new Error("'일실적·추이' 시트에서 '구간' 머리줄을 찾지 못했습니다.");
+    var head = rs[h].map(str);
+    var col = function (name) { return head.indexOf(name); };
+    for (i = h + 1; i < rs.length; i++) {
+      var iso = mdToISO(cell(rs[i], 0), base);
+      if (!iso) { if (str(cell(rs[i], 0)) === "") break; continue; }
+      var sales = {};
+      CHANNELS.forEach(function (ch) { var c = col(ch); if (c >= 0) sales[ch] = num(cell(rs[i], c)); });
+      out.days[iso] = {
+        sales: sales,
+        orders: num(cell(rs[i], col("주문건수"))),
+        adCost: num(cell(rs[i], col("광고비"))),
+        adRev: num(cell(rs[i], col("광고매출")))
+      };
+    }
+    // 2) 광고: 이번 달 채널별 광고비·광고매출
+    rs = rows(wb, "광고") || [];
+    for (i = 0; i < rs.length; i++) {
+      var t = str(cell(rs[i], 0)).match(/^이번 달 \((\d{1,2})\/(\d{1,2})~(\d{1,2})\/(\d{1,2})\)/);
+      if (!t) continue;
+      var hd = (rs[i + 1] || []).map(str);
+      var ci = function (n) { return hd.indexOf(n); };
+      var fromISO = mdToISO(t[1] + "/" + t[2], base), toISOd = mdToISO(t[3] + "/" + t[4], base);
+      var am = { month: fromISO.slice(0, 7), from: fromISO, to: toISOd, rows: [] };
+      for (var k = i + 2; k < rs.length; k++) {
+        var ch = str(cell(rs[k], 0));
+        if (!ch) break;
+        am.rows.push({ channel: ch, source: str(cell(rs[k], ci("원천"))), cost: num(cell(rs[k], ci("광고비"))), rev: num(cell(rs[k], ci("광고매출"))), imp: num(cell(rs[k], ci("노출"))), click: num(cell(rs[k], ci("클릭"))) });
+      }
+      out.adMonth = am;
+      break;
+    }
+    // 3) 상품원본: 날짜·채널·제품별 수량·매출
+    rs = rows(wb, "상품원본");
+    if (rs && rs.length) {
+      var ph = rs[0].map(str);
+      var pc = function (n) { return ph.indexOf(n); };
+      for (i = 1; i < rs.length; i++) {
+        var pd = toISO(cell(rs[i], pc("일자")));
+        if (!pd) continue;
+        var brand = str(cell(rs[i], pc("브랜드"))), prod = str(cell(rs[i], pc("상품")));
+        (out.products[pd] = out.products[pd] || []).push([str(cell(rs[i], pc("채널"))), brand, prod, num(cell(rs[i], pc("수량"))), num(cell(rs[i], pc("매출")))]);
+      }
+    }
+    return out;
+  }
+
+  /* 원장 양식 CSV: 날짜,채널,제품,매출,주문수,광고비,광고매출 */
+  var CSV_HEAD = ["날짜", "채널", "제품", "매출", "주문수", "광고비", "광고매출"];
+  function isLedgerCsv(wb) {
+    var rs = rows(wb, wb.SheetNames[0]) || [];
+    var hd = (rs[0] || []).map(str);
+    return hd.indexOf("날짜") >= 0 && hd.indexOf("채널") >= 0 && (hd.indexOf("매출") >= 0 || hd.indexOf("광고비") >= 0);
+  }
+  function parseLedgerCsv(wb) {
+    var rs = rows(wb, wb.SheetNames[0]);
+    var hd = rs[0].map(str);
+    var c = function (n) { return hd.indexOf(n); };
+    var out = { kind: "csv", base: null, days: {}, products: {}, adMonth: null, skipped: 0 };
+    for (var i = 1; i < rs.length; i++) {
+      var d = toISO(cell(rs[i], c("날짜")));
+      var ch = str(cell(rs[i], c("채널")));
+      if (!d || !ch) { if (rs[i].some(function (v) { return str(v) !== ""; })) out.skipped++; continue; }
+      var day = out.days[d] = out.days[d] || { sales: {}, orders: 0, adCost: 0, adRev: 0, adByCh: {} };
+      var s = num(cell(rs[i], c("매출"))), ac = num(cell(rs[i], c("광고비"))), ar = num(cell(rs[i], c("광고매출")));
+      day.sales[ch] = (day.sales[ch] || 0) + s;
+      day.orders += num(cell(rs[i], c("주문수")));
+      day.adCost += ac; day.adRev += ar;
+      if (ac || ar) { var a = day.adByCh[ch] = day.adByCh[ch] || { cost: 0, rev: 0 }; a.cost += ac; a.rev += ar; }
+      var p = str(cell(rs[i], c("제품")));
+      if (p && s) (out.products[d] = out.products[d] || []).push([ch, "", p, 0, s]);
+      if (!out.base || d > out.base) out.base = d;
+    }
+    return out;
+  }
+
+  function parseWorkbook(wb) {
+    if (isCenter(wb)) return parseCenter(wb);
+    if (isLedgerCsv(wb)) return parseLedgerCsv(wb);
+    return null;
+  }
+
+  /* 파싱 결과 → 월별 문서로 묶기 (같은 날짜는 덮어씀) */
+  function byMonth(obj) {
+    var m = {};
+    Object.keys(obj).forEach(function (d) { (m[d.slice(0, 7)] = m[d.slice(0, 7)] || {})[d] = obj[d]; });
+    return m;
+  }
+  function mergeDays(existing, incoming) {
+    var out = {};
+    Object.keys(existing || {}).forEach(function (d) { out[d] = existing[d]; });
+    Object.keys(incoming).forEach(function (d) { out[d] = incoming[d]; });
+    return out;
+  }
+
+  return { CHANNELS: CHANNELS, OFFLINE: OFFLINE, CSV_HEAD: CSV_HEAD, parseWorkbook: parseWorkbook, byMonth: byMonth, mergeDays: mergeDays, num: num, toISO: toISO };
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var L = LEDGER;
+  var COST_KINDS = ["체험단", "협찬·인플루언서", "콘텐츠 제작", "디자인 외주", "판촉물·샘플", "행사·박람회", "광고 대행 수수료", "기타"];
+  var COST_CHANNELS = ["전체(공통)"].concat(L.CHANNELS).concat(["블로그", "인스타그램", "유튜브"]);
+  var BANNED = ["치료", "완치", "예방", "의사 추천", "의사추천", "전문의 추천", "약사 추천", "증상 개선", "요실금 개선", "개선 효과", "효과 보장", "100% 효과", "특효", "의료기기 인증"];
+  var DEFAULT_BE = { all: 260.5, naver: 169.5, coupang: 400.5 };
+
+  var TASKS = [
+    { id: "ad", name: "광고 성과 분석", hint: "ROAS·광고비 흐름을 보고 다음 주 할 일",
+      role: "디알컴퍼니(성인용 요실금 팬티 등 위생용품 판매) 광고 운영 담당자를 돕는 퍼포먼스 마케터",
+      ask: "아래 통합 원장 숫자로 광고 성과를 분석해 주세요. 순서: ① 한 줄 결론 ② 채널별(쿠팡·네이버/스마트스토어) 손익분기 대비 판단 ③ 최근 30일 흐름에서 눈에 띄는 날과 이유로 볼 수 있는 것(확실하지 않으면 [추정]) ④ 이번 주 담당자가 직접 할 수 있는 일 3가지(무엇을, 얼마나, 언제 확인). 주문 수가 적으니 하루치로 단정하지 말고 주 단위로 판단하세요." },
+    { id: "pdp", name: "상세페이지 개선안", hint: "제품 상세페이지 구성·문구 제안",
+      role: "디알컴퍼니 제품 상세페이지를 다듬는 커머스 기획자",
+      ask: "아래 제품의 상세페이지 개선안을 써 주세요. 순서: ① 지금 숫자로 본 문제(유입 대비 매출 등, 숫자가 없으면 없다고 쓰기) ② 첫 화면(상단 3초) 문구 시안 3개 ③ 섹션 순서 제안(각 섹션에 넣을 내용) ④ 고객이 망설이는 지점과 답할 문구 ⑤ 바로 바꿔 볼 1순위. 사이즈·소재·흡수량 등 사실 정보는 제가 확인해야 하는 칸으로 [확인 필요]라고 표시하세요." },
+    { id: "blog", name: "블로그 글 초안", hint: "네이버 블로그용 정보형 글",
+      role: "디알컴퍼니 브랜드 블로그 글을 쓰는 콘텐츠 마케터",
+      ask: "아래 제품을 소개하는 네이버 블로그 글 초안을 써 주세요. 구성: 제목 후보 3개, 도입(공감), 본문 소제목 3~4개, 마무리와 구매 안내. 생활 속 불편을 덜어 주는 '편안함·안심·생활 편의' 관점으로 쓰고, 건강 효과를 약속하지 마세요. 1,500자 안팎. 사진이 들어갈 자리는 [사진: 설명]으로 표시하세요." },
+    { id: "sns", name: "SNS 콘텐츠 기획", hint: "인스타·쇼츠 게시물 기획안",
+      role: "디알컴퍼니 SNS(인스타그램·유튜브 쇼츠) 콘텐츠 기획자",
+      ask: "아래 제품으로 2주치 SNS 콘텐츠 기획안을 써 주세요. 게시물 6개를 표로: 형식(카드뉴스/릴스/쇼츠), 주제, 첫 문장(후킹), 내용 요약, 해시태그 5개. 끝에 이 중 먼저 만들 1개를 고른 이유를 한 줄로. 체험담처럼 꾸며 쓰지 말고, 실제 후기가 필요하면 [실제 후기 필요]로 표시하세요." }
+  ];
+
+  var state = { ledger: {}, products: {}, admonth: {}, costs: [], promos: [], tasks: [], uploads: [], settings: null, loaded: {} };
+  var db = null, sample = null, downloads = null, canWrite = true;
+
+  /* ---------- 도움 함수 ---------- */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") e.textContent = attrs[k];
+      else if (k === "class") e.className = attrs[k];
+      else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] !== null && attrs[k] !== undefined && attrs[k] !== false) e.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c !== null && c !== undefined) e.append(c.nodeType ? c : document.createTextNode(String(c))); });
+    return e;
+  }
+  function won(n) { return Math.round(n).toLocaleString("ko-KR") + "원"; }
+  function wonShort(n) {
+    var a = Math.abs(n);
+    if (a >= 1e8) return (n / 1e8).toFixed(2).replace(/\.?0+$/, "") + "억 원";
+    if (a >= 1e4) return (n / 1e4).toFixed(a >= 1e6 ? 0 : 1).replace(/\.0$/, "") + "만 원";
+    return won(n);
+  }
+  function pct(n) { return (Math.round(n * 10) / 10).toLocaleString("ko-KR") + "%"; }
+  function today() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  var WD = ["일", "월", "화", "수", "목", "금", "토"];
+  function dLabel(iso) { var d = new Date(iso + "T00:00:00"); return (d.getMonth() + 1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ")"; }
+  function addDays(iso, n) { var d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function be() { var s = state.settings || {}; return { all: s.all || DEFAULT_BE.all, naver: s.naver || DEFAULT_BE.naver, coupang: s.coupang || DEFAULT_BE.coupang }; }
+  function beFor(ch) { if (/스마트스토어|네이버/.test(ch)) return be().naver; if (/쿠팡/.test(ch)) return be().coupang; return null; }
+  function grade(roas, bep) { if (bep === null || !isFinite(roas)) return "none"; if (roas >= bep) return "good"; if (roas >= bep * 0.9) return "warn"; return "bad"; }
+  var GRADE_TEXT = { good: "손익분기 이상", warn: "손익분기 근처", bad: "손익분기 아래", none: "판단 기준 없음" };
+  function msg(box, kind, text) { box.hidden = false; box.className = "msg " + kind; box.textContent = text; }
+
+  /* ---------- 원장 계산 ---------- */
+  function allDays() {
+    var days = {};
+    Object.keys(state.ledger).forEach(function (id) {
+      var doc = state.ledger[id];
+      Object.keys(doc.days || {}).forEach(function (d) {
+        var src = doc.days[d], t = days[d] = days[d] || { sales: {}, orders: 0, adCost: 0, adRev: 0, adByCh: {} };
+        Object.keys(src.sales || {}).forEach(function (ch) { t.sales[ch] = (t.sales[ch] || 0) + (src.sales[ch] || 0); });
+        t.orders += src.orders || 0; t.adCost += src.adCost || 0; t.adRev += src.adRev || 0;
+        Object.keys(src.adByCh || {}).forEach(function (ch) { var a = t.adByCh[ch] = t.adByCh[ch] || { cost: 0, rev: 0 }; a.cost += src.adByCh[ch].cost || 0; a.rev += src.adByCh[ch].rev || 0; });
+      });
+    });
+    return days;
+  }
+  function online(day) { var s = 0; Object.keys(day.sales).forEach(function (ch) { if (ch !== L.OFFLINE) s += day.sales[ch]; }); return s; }
+  function monthCosts(month) { return state.costs.filter(function (c) { return (c.date || "").slice(0, 7) === month; }); }
+  function productRows(from, to) {
+    var out = [];
+    Object.keys(state.products).forEach(function (id) {
+      var days = state.products[id].days || {};
+      Object.keys(days).forEach(function (d) { if (d >= from && d <= to) days[d].forEach(function (r) { out.push({ date: d, channel: r[0], brand: r[1], product: r[2], qty: r[3], sales: r[4] }); }); });
+    });
+    return out;
+  }
+  function productName(r) { return (r.brand && r.brand !== r.product ? r.brand + " " : "") + r.product; }
+
+  function summary() {
+    var days = allDays();
+    var dates = Object.keys(days).sort();
+    if (!dates.length) return null;
+    var last = dates[dates.length - 1], month = last.slice(0, 7);
+    var monthDates = dates.filter(function (d) { return d.slice(0, 7) === month; });
+    var mOnline = 0, mAd = 0, mAdRev = 0, mByCh = {};
+    monthDates.forEach(function (d) {
+      var x = days[d]; mOnline += online(x); mAd += x.adCost; mAdRev += x.adRev;
+      Object.keys(x.sales).forEach(function (ch) { mByCh[ch] = (mByCh[ch] || 0) + x.sales[ch]; });
+    });
+    var costs = monthCosts(month), mOther = costs.reduce(function (s, c) { return s + (c.amount || 0); }, 0);
+    return { days: days, dates: dates, last: last, month: month, monthDates: monthDates, mOnline: mOnline, mAd: mAd, mAdRev: mAdRev, mByCh: mByCh, costs: costs, mOther: mOther };
+  }
+
+  function channelTable(S) {
+    var am = state.admonth[S.month] || null;
+    var adBy = {};
+    if (am) am.rows.forEach(function (r) { var a = adBy[r.channel] = adBy[r.channel] || { cost: 0, rev: 0 }; a.cost += r.cost; a.rev += r.rev; });
+    S.monthDates.forEach(function (d) { var x = S.days[d].adByCh || {}; Object.keys(x).forEach(function (ch) { var a = adBy[ch] = adBy[ch] || { cost: 0, rev: 0 }; a.cost += x[ch].cost; a.rev += x[ch].rev; }); });
+    var other = {};
+    S.costs.forEach(function (c) { other[c.channel] = (other[c.channel] || 0) + (c.amount || 0); });
+    var names = L.CHANNELS.slice();
+    Object.keys(adBy).concat(Object.keys(S.mByCh)).concat(Object.keys(other)).forEach(function (n) { if (names.indexOf(n) < 0 && n !== "전체(공통)") names.push(n); });
+    var rows = names.map(function (ch) {
+      var a = adBy[ch] || { cost: 0, rev: 0 };
+      return { ch: ch, sales: S.mByCh[ch] || 0, adCost: a.cost, adRev: a.rev, other: other[ch] || 0, offline: ch === L.OFFLINE };
+    }).filter(function (r) { return r.sales || r.adCost || r.adRev || r.other; });
+    if (other["전체(공통)"]) rows.push({ ch: "전체(공통)", sales: 0, adCost: 0, adRev: 0, other: other["전체(공통)"], common: true });
+    return { rows: rows, am: am };
+  }
+
+  /* ---------- 현황 그리기 ---------- */
+  function renderStatus() {
+    var S = summary();
+    $("status-empty").hidden = !!S || !state.loaded.ledger;
+    $("status-body").hidden = !S;
+    $("chart-panel").hidden = !S;
+    $("ch-table").closest(".panel").hidden = !S;
+    var fresh = $("fresh");
+    fresh.textContent = "";
+    if (!S) { fresh.textContent = state.loaded.ledger ? "통합 원장이 비어 있습니다. '데이터 넣기'에서 엑셀을 올려 주세요." : "자료를 불러오는 중입니다…"; return; }
+    var up = state.uploads[0];
+    fresh.append("원장 최신일 ", el("b", { text: S.last + " " + dLabel(S.last).replace(/^[^(]+/, "") }), " · 쌓인 날짜 " + S.dates.length + "일" + (up ? " · 마지막 업로드 " + new Date(up.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""));
+
+    var lastDay = S.days[S.last];
+    var lo = online(lastDay);
+    var prevWeek = S.days[addDays(S.last, -7)];
+    var cards = $("cards"); cards.textContent = "";
+    // 1 매출
+    cards.append(el("div", { class: "card" }, [
+      el("span", { class: "k", text: "최근일 온라인 매출 · " + dLabel(S.last) }),
+      el("span", { class: "v", text: wonShort(lo) }),
+      el("span", { class: "d", text: won(lo) + (prevWeek ? " · 지난주 같은 요일 " + wonShort(online(prevWeek)) : "") }),
+      el("span", { class: "d", text: "B2B·오프라인 " + wonShort(lastDay.sales[L.OFFLINE] || 0) + "은 제외" })
+    ]));
+    // 2 광고비
+    cards.append(el("div", { class: "card" }, [
+      el("span", { class: "k", text: "최근일 광고비 · " + dLabel(S.last) }),
+      el("span", { class: "v", text: wonShort(lastDay.adCost) }),
+      el("span", { class: "d", text: won(lastDay.adCost) + " (쿠팡+네이버)" }),
+      el("span", { class: "d", text: "이번 달 누계 " + wonShort(S.mAd) })
+    ]));
+    // 3 ROAS
+    var roas = lastDay.adCost ? lastDay.adRev / lastDay.adCost * 100 : NaN;
+    var g = grade(roas, be().all);
+    var r7c = 0, r7r = 0;
+    for (var i = 0; i < 7; i++) { var dd = S.days[addDays(S.last, -i)]; if (dd) { r7c += dd.adCost; r7r += dd.adRev; } }
+    cards.append(el("div", { class: "card " + (g === "none" ? "" : g) }, [
+      el("span", { class: "k", text: "최근일 광고 ROAS · " + dLabel(S.last) }),
+      el("span", { class: "v", text: isFinite(roas) ? pct(roas) : "—" }),
+      el("span", { class: "pill " + g, text: GRADE_TEXT[g] + " (기준 " + pct(be().all) + ")" }),
+      el("span", { class: "d", text: "최근 7일 " + (r7c ? pct(r7r / r7c * 100) : "—") + " · 하루치는 흔들리니 7일도 함께 보세요" })
+    ]));
+    // 4 MER
+    var spend = S.mAd + S.mOther;
+    var mer = spend ? S.mOnline / spend : NaN;
+    cards.append(el("div", { class: "card" }, [
+      el("span", { class: "k", text: "이번 달 MER · " + S.month.replace("-", "년 ") + "월" }),
+      el("span", { class: "v", text: isFinite(mer) ? mer.toFixed(2) + "배" : "—" }),
+      el("span", { class: "d", text: "온라인 매출 " + wonShort(S.mOnline) + " ÷ 마케팅 비용 " + wonShort(spend) }),
+      el("span", { class: "d", text: "광고비 " + wonShort(S.mAd) + " + 기타 비용 " + wonShort(S.mOther) + (S.costs.length ? " (" + S.costs.length + "건)" : " (입력 0건)") })
+    ]));
+    renderChart(S);
+    renderTable(S);
+  }
+
+  function renderChart(S) {
+    var box = $("chart"); box.textContent = "";
+    var end = S.last, start = addDays(end, -29);
+    var pts = [];
+    for (var d = start; d <= end; d = addDays(d, 1)) { var x = S.days[d]; pts.push({ d: d, has: !!x, sales: x ? online(x) : 0, ad: x ? x.adCost : 0 }); }
+    var missing = pts.filter(function (p) { return !p.has; }).length;
+    $("chart-note").textContent = start + " ~ " + end + (missing ? " · 자료 없는 날 " + missing + "일은 비워 둠" : "");
+    var W = 960, H = 320, ml = 64, mr = 16, mt = 16, mb = 36;
+    var max = Math.max.apply(null, pts.map(function (p) { return Math.max(p.sales, p.ad); }).concat([1]));
+    var step = niceStep(max / 4), top = Math.ceil(max / step) * step;
+    var xw = (W - ml - mr) / (pts.length - 1);
+    var X = function (i) { return ml + i * xw; }, Y = function (v) { return mt + (H - mt - mb) * (1 - v / top); };
+    var NS = "http://www.w3.org/2000/svg";
+    function s(tag, a) { var e = document.createElementNS(NS, tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); return e; }
+    var svg = s("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "최근 30일 온라인 매출과 광고비 추이" });
+    for (var v = 0; v <= top + 1; v += step) {
+      svg.append(s("line", { x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), stroke: "#e2e8f0", "stroke-width": 1 }));
+      var t = s("text", { x: ml - 8, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = v === 0 ? "0" : (v / 1e4).toLocaleString("ko-KR") + "만"; svg.append(t);
+    }
+    pts.forEach(function (p, i) {
+      if (i % 5 === 0 || i === pts.length - 1) { var tx = s("text", { x: X(i), y: H - 12, "text-anchor": i === pts.length - 1 ? "end" : "middle" }); tx.textContent = (+p.d.slice(5, 7)) + "/" + (+p.d.slice(8)); svg.append(tx); }
+    });
+    function path(key) {
+      var dStr = "", pen = false;
+      pts.forEach(function (p, i) { if (!p.has) { pen = false; return; } dStr += (pen ? "L" : "M") + X(i).toFixed(1) + "," + Y(p[key]).toFixed(1); pen = true; });
+      return dStr;
+    }
+    var area = "", run = [];
+    function flush() { if (run.length > 1) { area += "M" + X(run[0]).toFixed(1) + "," + Y(0) + run.map(function (i) { return "L" + X(i).toFixed(1) + "," + Y(pts[i].sales).toFixed(1); }).join("") + "L" + X(run[run.length - 1]).toFixed(1) + "," + Y(0) + "Z"; } run = []; }
+    pts.forEach(function (p, i) { if (p.has) run.push(i); else flush(); }); flush();
+    svg.append(s("path", { d: area, fill: "rgba(26,86,219,0.10)", stroke: "none" }));
+    svg.append(s("path", { d: path("sales"), fill: "none", stroke: "#1a56db", "stroke-width": 3, "stroke-linejoin": "round" }));
+    svg.append(s("path", { d: path("ad"), fill: "none", stroke: "#d97706", "stroke-width": 2.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
+    var li = pts.length - 1;
+    if (pts[li].has) { svg.append(s("circle", { cx: X(li), cy: Y(pts[li].sales), r: 5, fill: "#1a56db" })); svg.append(s("circle", { cx: X(li), cy: Y(pts[li].ad), r: 4, fill: "#d97706" })); }
+    var guide = s("line", { x1: 0, x2: 0, y1: mt, y2: H - mb, stroke: "#94a3b8", "stroke-width": 1, visibility: "hidden" });
+    svg.append(guide);
+    var hit = s("rect", { x: ml, y: mt, width: W - ml - mr, height: H - mt - mb, fill: "transparent" });
+    svg.append(hit);
+    box.append(svg);
+    var tip = el("div", { class: "tip", hidden: true }); box.append(tip);
+    function show(evt) {
+      var r = svg.getBoundingClientRect();
+      var xv = (evt.clientX - r.left) / r.width * W;
+      var i = Math.max(0, Math.min(pts.length - 1, Math.round((xv - ml) / xw)));
+      var p = pts[i];
+      guide.setAttribute("x1", X(i)); guide.setAttribute("x2", X(i)); guide.setAttribute("visibility", "visible");
+      tip.hidden = false; tip.textContent = "";
+      tip.append(el("div", { text: dLabel(p.d) }), el("div", { text: p.has ? "매출 " + won(p.sales) : "자료 없음" }), p.has ? el("div", { text: "광고비 " + won(p.ad) }) : null);
+      var left = X(i) / W * r.width;
+      tip.style.left = Math.min(Math.max(left - 70, 0), r.width - 170) + "px"; tip.style.top = "0px";
+    }
+    hit.addEventListener("pointermove", show);
+    hit.addEventListener("pointerleave", function () { tip.hidden = true; guide.setAttribute("visibility", "hidden"); });
+  }
+  function niceStep(raw) { var p = Math.pow(10, Math.floor(Math.log10(raw || 1))); var n = raw / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; }
+
+  function renderTable(S) {
+    var T = channelTable(S), tb = $("ch-table"); tb.textContent = "";
+    $("table-title").textContent = S.month.replace("-", "년 ") + "월 채널별 비용 대비 매출";
+    $("table-period").textContent = "매출 " + S.monthDates[0].slice(5) + "~" + S.last.slice(5) + (T.am ? " · 채널 광고 " + T.am.from.slice(5) + "~" + T.am.to.slice(5) : " · 채널별 광고 자료 없음");
+    $("be-n").textContent = be().naver; $("be-c").textContent = be().coupang;
+    tb.append(el("thead", null, [el("tr", null, ["채널", "매출", "광고비", "광고매출", "광고 ROAS", "기타 마케팅 비용", "비용 대비 매출"].map(function (h) { return el("th", { scope: "col", text: h }); }))]));
+    var body = el("tbody"), tot = { sales: 0, adCost: 0, adRev: 0, other: 0 };
+    function row(r, cls) {
+      var roas = r.adCost ? r.adRev / r.adCost * 100 : NaN, bep = beFor(r.ch), g = grade(roas, bep);
+      var spend = r.adCost + r.other;
+      var roasCell = el("td");
+      if (isFinite(roas)) { roasCell.append(pct(roas)); if (bep) roasCell.append(el("span", { class: "pill " + g, text: g === "good" ? "이상" : g === "warn" ? "근처" : "아래" })); } else roasCell.append("—");
+      return el("tr", { class: cls || null }, [
+        el("td", { text: r.ch + (r.offline ? " (참고)" : "") }), el("td", { text: r.common ? "—" : won(r.sales) }), el("td", { text: r.adCost ? won(r.adCost) : "—" }), el("td", { text: r.adRev ? won(r.adRev) : "—" }), roasCell,
+        el("td", { text: r.other ? won(r.other) : "—" }), el("td", { text: spend && !r.common ? (r.sales / spend).toFixed(2) + "배" : "—" })
+      ]);
+    }
+    T.rows.filter(function (r) { return !r.offline; }).forEach(function (r) { tot.sales += r.sales; tot.adCost += r.adCost; tot.adRev += r.adRev; tot.other += r.other; body.append(row(r)); });
+    body.append(row({ ch: "온라인 합계", sales: tot.sales, adCost: tot.adCost, adRev: tot.adRev, other: tot.other }, "total"));
+    T.rows.filter(function (r) { return r.offline; }).forEach(function (r) { body.append(row(r, "dim")); });
+    tb.append(body);
+  }
+
+  /* ---------- 업로드 ---------- */
+  async function handleFiles(files) {
+    var box = $("up-msg");
+    if (!db) { msg(box, "bad", "저장 기능을 쓸 수 없는 화면입니다. claude.ai에서 이 페이지를 열어 주세요."); return; }
+    if (!canWrite) { msg(box, "bad", "이 페이지에 쓰기 권한이 없습니다. 소유자에게 편집 권한을 요청해 주세요."); return; }
+    if (typeof XLSX === "undefined") { msg(box, "bad", "엑셀을 읽는 부품을 불러오지 못했습니다. 페이지를 새로 고쳐 주세요."); return; }
+    for (var f = 0; f < files.length; f++) {
+      var file = files[f];
+      msg(box, "", file.name + " 읽는 중…");
+      try {
+        var buf = await file.arrayBuffer();
+        var wb = XLSX.read(buf, { type: "array", cellDates: false });
+        var parsed = L.parseWorkbook(wb);
+        if (!parsed && /\.csv$/i.test(file.name)) { wb = XLSX.read(buf, { type: "array", codepage: 949 }); parsed = L.parseWorkbook(wb); }
+        if (!parsed) { msg(box, "bad", file.name + ": 어떤 파일인지 알아보지 못했습니다. 실적센터 '통합 실적' 엑셀(시트 '일실적·추이'·'광고' 포함)이나 원장 양식 CSV(머리줄: " + L.CSV_HEAD.join(",") + ")만 받습니다."); continue; }
+        await saveParsed(parsed, file.name, box);
+      } catch (e) {
+        msg(box, "bad", file.name + ": " + (e && e.code === "quota_exceeded" ? "저장 공간이 가득 찼습니다. 오래된 작업 기록을 지워 주세요." : (e && e.message) || "읽는 중 오류가 났습니다."));
+      }
+    }
+  }
+  async function saveParsed(P, name, box) {
+    var dayDates = Object.keys(P.days).sort();
+    var src = P.kind === "center" ? "center" : "csv";
+    var lm = L.byMonth(P.days), pm = L.byMonth(P.products);
+    var months = Object.keys(lm).concat(Object.keys(pm)).filter(function (m, i, a) { return a.indexOf(m) === i; }).sort();
+    var done = 0, total = months.length * 2 + (P.adMonth ? 1 : 0) + 1;
+    function tick() { done++; msg(box, "", name + " 저장 중… " + Math.round(done / total * 100) + "%"); }
+    for (var i = 0; i < months.length; i++) {
+      var m = months[i];
+      if (lm[m]) {
+        var ref = db.doc("ledger/" + src + "_" + m), cur = await ref.get();
+        await ref.set({ source: src, month: m, days: L.mergeDays(cur.exists ? cur.data().days : {}, lm[m]), updatedAt: new Date().toISOString(), file: name });
+      }
+      tick();
+      if (pm[m]) {
+        var pref = db.doc("products/" + src + "_" + m), pcur = await pref.get();
+        await pref.set({ source: src, month: m, days: L.mergeDays(pcur.exists ? pcur.data().days : {}, pm[m]), updatedAt: new Date().toISOString() });
+      }
+      tick();
+    }
+    if (P.adMonth) { await db.doc("admonth/" + P.adMonth.month).set(Object.assign({ updatedAt: new Date().toISOString(), file: name }, P.adMonth)); tick(); }
+    var prodCount = Object.keys(P.products).reduce(function (s, d) { return s + P.products[d].length; }, 0);
+    await db.collection("uploads").add({ file: name, kind: P.kind === "center" ? "실적센터 통합 실적" : "원장 양식 CSV", from: dayDates[0] || null, to: dayDates[dayDates.length - 1] || null, days: dayDates.length, products: prodCount, at: new Date().toISOString() });
+    msg(box, "good", name + " 저장 완료 · " + (P.kind === "center" ? "통합 실적 엑셀" : "원장 CSV") + " · 날짜 " + dayDates.length + "일(" + (dayDates[0] || "-") + " ~ " + (dayDates[dayDates.length - 1] || "-") + ")" + (prodCount ? " · 제품 " + prodCount.toLocaleString("ko-KR") + "행" : "") + (P.adMonth ? " · 채널 광고 " + P.adMonth.rows.length + "개" : "") + (P.skipped ? " · 날짜·채널이 비어 건너뛴 줄 " + P.skipped + "개" : "") + ". 같은 날짜는 새 숫자로 덮어썼습니다.");
+  }
+
+  /* ---------- 내려받기 ---------- */
+  function csvCell(v) { var s = v === null || v === undefined ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  async function save(filename, text, statusEl) {
+    if (!downloads) { statusEl && (statusEl.textContent = "이 화면에서는 내려받기를 쓸 수 없습니다."); return; }
+    try { await downloads.save({ filename: filename, data: "﻿" + text }); }
+    catch (e) { if (e && e.code !== "declined") alertBox(e.code === "rate_limited" ? "잠시 뒤 다시 눌러 주세요." : "내려받기를 하지 못했습니다."); }
+  }
+  function alertBox(t) { msg($("up-msg"), "warn", t); }
+  function ledgerCsv() {
+    var days = allDays(), lines = [L.CSV_HEAD.join(",")];
+    Object.keys(days).sort().forEach(function (d) {
+      var x = days[d];
+      var chs = Object.keys(x.sales);
+      chs.forEach(function (ch, i) {
+        var a = x.adByCh[ch];
+        lines.push([d, ch, "", x.sales[ch], i === 0 ? x.orders : "", a ? a.cost : "", a ? a.rev : ""].map(csvCell).join(","));
+      });
+      var byCh = Object.keys(x.adByCh).reduce(function (s, ch) { return s + x.adByCh[ch].cost; }, 0);
+      if (x.adCost - byCh) lines.push([d, "광고 합계(채널 구분 없음)", "", "", "", x.adCost - byCh, x.adRev - Object.keys(x.adByCh).reduce(function (s, ch) { return s + x.adByCh[ch].rev; }, 0)].map(csvCell).join(","));
+    });
+    return lines.join("\n");
+  }
+
+  /* ---------- 작업 (클로드) ---------- */
+  var activeTask = null, ctl = null;
+  function renderTaskButtons() {
+    var wrap = $("task-btns"); wrap.textContent = "";
+    TASKS.forEach(function (t) {
+      wrap.append(el("button", { type: "button", class: "task-btn", "aria-pressed": activeTask === t.id ? "true" : "false", onclick: function () { activeTask = t.id; renderTaskButtons(); openTask(t); } }, [el("b", { text: t.name }), el("span", { text: t.hint })]));
+    });
+  }
+  function openTask(t) {
+    var f = $("task-form"); f.hidden = false;
+    $("task-form-title").textContent = t.name;
+    $("t-out").hidden = true; $("t-status").textContent = sample ? "" : "이 화면에서는 클로드 호출을 쓸 수 없습니다. claude.ai에서 열어 주세요.";
+    $("t-run").disabled = !sample;
+    $("t-product").focus();
+  }
+  function dataBlock(product) {
+    var S = summary();
+    if (!S) return "통합 원장: 자료 없음 (업로드 전). 숫자 판단이 필요하면 '자료 없음'이라고 쓰세요.";
+    var lines = [];
+    lines.push("[기준] 원장 최신일 " + S.last + ". 매출은 온라인 채널 합계(B2B·오프라인 제외). 광고비·광고매출은 쿠팡 광고+네이버 검색광고 합계. 쿠팡 로켓배송 매출은 우리 공급액, 쿠팡 광고매출은 소비자 판매액(14일 전환)이라 기준이 다름.");
+    lines.push("[손익분기 ROAS] 전체 " + be().all + "% · 네이버/스마트스토어 " + be().naver + "% · 쿠팡 " + be().coupang + "% (이 아래면 광고할수록 손해)");
+    lines.push("[최근 30일 일별] 날짜,온라인매출,주문수,광고비,광고매출,ROAS%");
+    for (var i = 29; i >= 0; i--) { var d = addDays(S.last, -i), x = S.days[d]; if (x) lines.push([d, Math.round(online(x)), x.orders, Math.round(x.adCost), Math.round(x.adRev), x.adCost ? Math.round(x.adRev / x.adCost * 100) : ""].join(",")); }
+    var T = channelTable(S);
+    lines.push("[" + S.month + " 채널별] 채널,매출,광고비,광고매출,ROAS%,기타마케팅비" + (T.am ? " (채널 광고 기간 " + T.am.from + "~" + T.am.to + ")" : ""));
+    T.rows.forEach(function (r) { lines.push([r.ch, Math.round(r.sales), Math.round(r.adCost), Math.round(r.adRev), r.adCost ? Math.round(r.adRev / r.adCost * 100) : "", Math.round(r.other)].join(",")); });
+    lines.push("[" + S.month + " 합계] 온라인매출 " + Math.round(S.mOnline) + " · 광고비 " + Math.round(S.mAd) + " · 기타 마케팅비 " + Math.round(S.mOther) + " · MER " + ((S.mAd + S.mOther) ? (S.mOnline / (S.mAd + S.mOther)).toFixed(2) : "-"));
+    var from = addDays(S.last, -59), pr = productRows(from, S.last);
+    var agg = {};
+    pr.forEach(function (r) { if (r.channel === L.OFFLINE) return; var k = productName(r); var a = agg[k] = agg[k] || { qty: 0, sales: 0, ch: {} }; a.qty += r.qty; a.sales += r.sales; a.ch[r.channel] = (a.ch[r.channel] || 0) + r.sales; });
+    var top = Object.keys(agg).sort(function (a, b) { return agg[b].sales - agg[a].sales; }).slice(0, 12);
+    if (top.length) {
+      lines.push("[최근 60일 제품별 온라인 매출 상위] 제품,수량,매출,채널별 매출");
+      top.forEach(function (k) { lines.push([k, agg[k].qty, Math.round(agg[k].sales), Object.keys(agg[k].ch).map(function (c) { return c + " " + Math.round(agg[k].ch[c]); }).join(" / ")].join(",")); });
+    }
+    if (product) {
+      var q = product.replace(/\s+/g, "").toLowerCase();
+      var mine = pr.filter(function (r) { return productName(r).replace(/\s+/g, "").toLowerCase().indexOf(q) >= 0 || q.indexOf(r.product.replace(/\s+/g, "").toLowerCase()) >= 0; });
+      if (mine.length) {
+        var wk = {};
+        mine.forEach(function (r) { var w = r.date.slice(0, 7); var a = wk[w + "|" + r.channel] = wk[w + "|" + r.channel] || { qty: 0, sales: 0 }; a.qty += r.qty; a.sales += r.sales; });
+        lines.push("[선택 제품 '" + product + "' 최근 60일 월·채널별] 월,채널,수량,매출");
+        Object.keys(wk).sort().forEach(function (k) { var p = k.split("|"); lines.push([p[0], p[1], wk[k].qty, Math.round(wk[k].sales)].join(",")); });
+      } else lines.push("[선택 제품 '" + product + "'] 원장에서 이 이름의 판매 기록을 찾지 못함.");
+    }
+    if (S.costs.length) { lines.push("[" + S.month + " 기타 마케팅 비용] 날짜,채널,유형,제품,금액,메모"); S.costs.forEach(function (c) { lines.push([c.date, c.channel, c.kind, c.product || "", c.amount, c.memo || ""].join(",")); }); }
+    var act = state.promos.filter(function (p) { return p.active !== false; });
+    if (act.length) { lines.push("[진행 중 홍보] 홍보명,채널,제품,시작일,월비용,담당"); act.forEach(function (p) { lines.push([p.name, p.channel, p.product || "", p.start, p.monthly || "", p.owner || ""].join(",")); }); }
+    return lines.join("\n");
+  }
+  function buildPrompt(t, product, goal, extra) {
+    return [
+      "당신은 " + t.role + "입니다.",
+      "",
+      "## 할 일",
+      t.ask,
+      "",
+      "## 입력",
+      "- 제품: " + (product || "전체 제품"),
+      "- 목표: " + (goal || "(적지 않음)"),
+      "- 추가 요청: " + (extra || "(없음)"),
+      "",
+      "## 반드시 지킬 규칙",
+      "1. 한국어로, 50~60대 담당자가 읽기 쉬운 짧은 문장으로 쓰세요. 전문용어는 괄호로 풀어 주세요.",
+      "2. 아래 통합 원장에 없는 숫자는 만들지 마세요. 추정이 필요하면 숫자나 문장 앞에 [추정]을 붙이고, 근거를 한 줄로 쓰세요.",
+      "3. 이 회사 제품은 위생용품·의료기기·의약외품과 관련될 수 있습니다. 광고·홍보 문구에 '치료', '개선', '예방', '완치', '효과 보장', '의사 추천', '전문의 추천', '약사 추천' 같은 의료 효능·과장 표현을 쓰지 마세요. 증상이나 질병을 낫게 한다는 표현도 금지입니다. '편안함', '안심', '생활 편의', '착용감' 같은 사용 경험 표현을 쓰세요. (분석 글에서 '광고 성과를 개선' 같은 업무 표현은 괜찮지만, 제품 효능을 말할 때는 쓰지 마세요.)",
+      "4. 쿠팡·스마트스토어 자동 수집이나 블로그·SNS 자동 게시를 제안하지 마세요. 사람이 직접 하는 일로 쓰세요.",
+      "5. 결과는 마크다운으로: '## 제목'과 '- 목록'을 쓰고, 표가 필요하면 '|' 표를 쓰세요. 맨 위에 한 줄 결론을 쓰세요.",
+      "",
+      "## 통합 원장 숫자",
+      dataBlock(product)
+    ].join("\n");
+  }
+  function renderMarkdown(text, host) {
+    host.textContent = "";
+    var lines = text.split("\n"), ul = null, table = null;
+    function strip(s) { return s.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1"); }
+    lines.forEach(function (raw) {
+      var line = raw.trimEnd();
+      var m;
+      if (/^\s*\|.*\|\s*$/.test(line)) {
+        ul = null;
+        var cells = line.trim().replace(/^\||\|$/g, "").split("|").map(function (c) { return strip(c.trim()); });
+        if (cells.every(function (c) { return /^:?-{2,}:?$/.test(c); })) return;
+        if (!table) { var wrapT = el("div", { class: "table-scroll" }); table = el("table"); wrapT.append(table); host.append(wrapT); table.append(el("tr", null, cells.map(function (c) { return el("th", { class: "txt", text: c }); }))); return; }
+        table.append(el("tr", null, cells.map(function (c) { return el("td", { class: "txt", text: c }); })));
+        return;
+      }
+      table = null;
+      if (!line.trim()) { ul = null; return; }
+      if ((m = line.match(/^#{1,6}\s+(.*)$/))) { ul = null; host.append(el("h4", { text: strip(m[1]) })); return; }
+      if ((m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/))) { if (!ul) { ul = el("ul"); host.append(ul); } ul.append(el("li", { text: strip(m[1]) })); return; }
+      ul = null; host.append(el("p", { text: strip(line) }));
+    });
+  }
+  function bannedIn(text) { return BANNED.filter(function (w) { return text.indexOf(w) >= 0; }); }
+  function resultView(text, record) {
+    var wrap = el("div", { style: "display:grid;gap:10px" });
+    var hits = bannedIn(text);
+    if (hits.length) wrap.append(el("div", { class: "msg warn", text: "확인 필요 표현: " + hits.join(", ") + " — 광고·상세페이지에 쓰기 전에 바꿔 주세요." }));
+    var body = el("div", { class: "result" }); renderMarkdown(text, body); wrap.append(body);
+    var bar = el("div", { class: "row" });
+    bar.append(el("button", { type: "button", class: "ghost small", text: "글 복사", onclick: function (e) {
+      var b = e.currentTarget;
+      navigator.clipboard.writeText(text).then(function () { b.textContent = "복사됨"; }, function () { var r = document.createRange(); r.selectNodeContents(body); var s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "선택됨 — Ctrl+C"; });
+    } }));
+    if (downloads) bar.append(el("button", { type: "button", class: "ghost small", text: "파일로 받기 (.md)", onclick: function () { save((record ? record.typeName + "_" + (record.product || "전체") + "_" + record.createdAt.slice(0, 10) : "작업결과") + ".md", text); } }));
+    if (record && record.id && canWrite) {
+      var del = el("button", { type: "button", class: "danger small", text: "기록 지우기" });
+      var confirmBox = el("span", { class: "row", hidden: true }, [el("span", { class: "note", text: "정말 지울까요?" }), el("button", { type: "button", class: "danger small", text: "지우기", onclick: function () { db.doc("tasks/" + record.id).delete(); } }), el("button", { type: "button", class: "ghost small", text: "취소", onclick: function () { confirmBox.hidden = true; del.hidden = false; } })]);
+      del.addEventListener("click", function () { del.hidden = true; confirmBox.hidden = false; });
+      bar.append(del, confirmBox);
+    }
+    wrap.append(bar);
+    return wrap;
+  }
+  async function runTask(e) {
+    e.preventDefault();
+    var t = TASKS.filter(function (x) { return x.id === activeTask; })[0];
+    if (!t || !sample) return;
+    var product = $("t-product").value.trim(), goal = $("t-goal").value.trim(), extra = $("t-extra").value.trim();
+    var prompt = buildPrompt(t, product, goal, extra);
+    var out = $("t-out"); out.hidden = false; out.textContent = "";
+    var live = el("div", { class: "result" }, [el("p", { class: "thinking", text: "클로드가 숫자를 읽고 생각하는 중입니다… (보통 10초~1분)" })]);
+    out.append(live);
+    $("t-run").disabled = true; $("t-stop").hidden = false; $("t-status").textContent = "";
+    ctl = new AbortController();
+    try {
+      var res = await sample(prompt, { signal: ctl.signal, cache: false, onText: function (u) { renderMarkdown(u.text, live); } });
+      var S = summary();
+      var rec = { type: t.id, typeName: t.name, product: product, goal: goal, extra: extra, text: res.text, truncated: !!res.truncated, asOf: S ? S.last : null, createdAt: new Date().toISOString() };
+      out.textContent = ""; out.append(resultView(res.text, rec));
+      if (res.truncated) out.append(el("p", { class: "note", text: "글이 길어 중간에 끊겼습니다. 요청을 나눠서 다시 맡겨 주세요." }));
+      if (db && canWrite) { try { await db.collection("tasks").add(rec); $("t-status").textContent = "작업 기록에 저장했습니다."; } catch (err) { $("t-status").textContent = err && err.code === "quota_exceeded" ? "저장 공간이 가득 차 기록하지 못했습니다. 오래된 기록을 지워 주세요." : "작업 기록 저장에 실패했습니다."; } }
+    } catch (err) {
+      var code = err && err.code;
+      if (code === "cancelled") { $("t-status").textContent = "멈췄습니다."; if (err.text) renderMarkdown(err.text, live); }
+      else if (code === "not_granted" || code === "sampling_disabled") { out.textContent = ""; $("t-status").textContent = "클로드 사용이 허용되지 않았습니다. 페이지의 권한 메뉴에서 허용하면 쓸 수 있습니다."; }
+      else if (code === "rate_limited") { $("t-status").textContent = "요청이 많아 잠시 쉬어야 합니다. 몇 분 뒤 다시 눌러 주세요."; }
+      else if (code === "refused") { out.textContent = ""; $("t-status").textContent = "클로드가 이 요청을 거절했습니다. 추가 요청 문구를 바꿔 보세요."; }
+      else { if (err && err.text) renderMarkdown(err.text, live); else out.textContent = ""; $("t-status").textContent = "연결이 끊겼습니다. 다시 눌러 주세요."; }
+    } finally { $("t-run").disabled = false; $("t-stop").hidden = true; }
+  }
+  function renderHistory() {
+    var h = $("history"); h.textContent = "";
+    $("task-count").textContent = state.tasks.length ? state.tasks.length + "건" : "";
+    if (!state.tasks.length) { h.append(el("p", { class: "note", text: state.loaded.tasks ? "아직 저장된 작업이 없습니다. 위 버튼 하나를 눌러 첫 작업을 맡겨 보세요." : "불러오는 중…" })); return; }
+    state.tasks.forEach(function (r) {
+      var d = el("details");
+      var sum = el("summary", null, [el("b", { text: r.typeName }), el("span", { text: (r.product || "전체 제품") + (r.goal ? " · " + r.goal : "") }), el("span", { class: "note", text: new Date(r.createdAt).toLocaleString("ko-KR") + (r.asOf ? " · 원장 " + r.asOf + " 기준" : "") })]);
+      d.append(sum);
+      d.addEventListener("toggle", function () { if (d.open && !d.dataset.built) { d.dataset.built = "1"; var b = el("div", { class: "body" }); b.append(resultView(r.text, r)); d.append(b); } });
+      h.append(d);
+    });
+  }
+
+  /* ---------- 비용 · 홍보 · 기준 ---------- */
+  function fillSelect(id, items) { var s = $(id); s.textContent = ""; items.forEach(function (i) { s.append(el("option", { value: i, text: i })); }); }
+  function renderCosts() {
+    var box = $("cost-list"); box.textContent = "";
+    var S = summary(), month = S ? S.month : today().slice(0, 7);
+    var list = state.costs.filter(function (c) { return (c.date || "").slice(0, 7) >= month; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    if (!list.length) { box.append(el("p", { class: "note", text: state.loaded.costs ? "이번 달 입력한 비용이 없습니다." : "불러오는 중…" })); return; }
+    list.forEach(function (c) {
+      box.append(el("div", { class: "list-item" }, [
+        el("span", { class: "note", text: c.date }),
+        el("span", { class: "grow", text: c.channel + " · " + c.kind + (c.product ? " · " + c.product : "") + (c.memo ? " — " + c.memo : "") }),
+        el("span", { class: "amt", text: won(c.amount) }),
+        canWrite ? el("button", { type: "button", class: "danger small", text: "삭제", onclick: function (e) { var b = e.currentTarget; if (b.dataset.sure) db.doc("costs/" + c.id).delete(); else { b.dataset.sure = "1"; b.textContent = "한 번 더 누르면 삭제"; } } }) : null
+      ]));
+    });
+  }
+  function renderPromos() {
+    var box = $("promo-list"); box.textContent = "";
+    var list = state.promos.slice().sort(function (a, b) { return (a.active === false) - (b.active === false) || (a.start < b.start ? 1 : -1); });
+    if (!list.length) { box.append(el("p", { class: "note", text: state.loaded.promos ? "등록된 홍보가 없습니다." : "불러오는 중…" })); return; }
+    list.forEach(function (p) {
+      var on = p.active !== false;
+      box.append(el("div", { class: "list-item" + (on ? "" : " dim"), style: on ? null : "opacity:.6" }, [
+        el("span", { class: "pill " + (on ? "good" : "none"), text: on ? "진행 중" : "종료" }),
+        el("span", { class: "grow", text: p.name + " · " + p.channel + (p.product ? " · " + p.product : "") + " · " + p.start + "~" + (p.owner ? " · 담당 " + p.owner : "") }),
+        el("span", { class: "amt", text: p.monthly ? "월 " + won(p.monthly) : "월 비용 미입력" }),
+        canWrite ? el("button", { type: "button", class: "ghost small", text: on ? "종료로 표시" : "다시 진행", onclick: function () { db.doc("promos/" + p.id).update({ active: !on }); } }) : null,
+        canWrite ? el("button", { type: "button", class: "danger small", text: "삭제", onclick: function (e) { var b = e.currentTarget; if (b.dataset.sure) db.doc("promos/" + p.id).delete(); else { b.dataset.sure = "1"; b.textContent = "한 번 더 누르면 삭제"; } } }) : null
+      ]));
+    });
+  }
+  function renderUploads() {
+    var box = $("upload-list"); box.textContent = "";
+    if (!state.uploads.length) { box.append(el("p", { class: "note", text: "아직 올린 파일이 없습니다." })); return; }
+    state.uploads.slice(0, 15).forEach(function (u) {
+      box.append(el("div", { class: "list-item" }, [el("span", { class: "note", text: new Date(u.at).toLocaleString("ko-KR") }), el("span", { class: "grow", text: u.file + " · " + u.kind }), el("span", { text: (u.from || "-") + " ~ " + (u.to || "-") + " (" + u.days + "일)" })]));
+    });
+  }
+  function renderProducts() {
+    var names = {};
+    productRows("0000-00-00", "9999-99-99").forEach(function (r) { if (r.brand !== "기타" && r.brand !== "바름") names[productName(r)] = (names[productName(r)] || 0) + r.sales; });
+    var dl = $("product-list"); dl.textContent = "";
+    Object.keys(names).sort(function (a, b) { return names[b] - names[a]; }).forEach(function (n) { dl.append(el("option", { value: n })); });
+  }
+  function renderSettings() { var b = be(); $("be-all").value = b.all; $("be-naver").value = b.naver; $("be-coupang").value = b.coupang; }
+  function renderAll() { renderStatus(); renderHistory(); renderCosts(); renderPromos(); renderUploads(); renderProducts(); }
+
+  /* ---------- 화면 전환 ---------- */
+  var VIEWS = ["status", "tasks", "data"];
+  function route() {
+    var v = (location.hash || "").replace("#", "");
+    if (VIEWS.indexOf(v) < 0) v = "status";
+    VIEWS.forEach(function (x) { $("view-" + x).hidden = x !== v; });
+    document.querySelectorAll("nav.tabs a").forEach(function (a) { if (a.dataset.view === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  }
+  window.addEventListener("hashchange", route);
+
+  /* ---------- 시작 ---------- */
+  function wireForms() {
+    fillSelect("c-channel", COST_CHANNELS); fillSelect("p-channel", COST_CHANNELS); fillSelect("c-kind", COST_KINDS);
+    $("c-date").value = today(); $("p-start").value = today();
+    renderTaskButtons();
+    $("task-form").addEventListener("submit", runTask);
+    $("t-stop").addEventListener("click", function () { ctl && ctl.abort(); });
+    var drop = $("drop"), fin = $("file-in");
+    fin.addEventListener("change", function () { if (fin.files.length) handleFiles(Array.from(fin.files)).then(function () { fin.value = ""; }); });
+    ["dragenter", "dragover"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+    ["dragleave", "drop"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+    drop.addEventListener("drop", function (e) { if (e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files)); });
+    $("dl-template").addEventListener("click", function () { save("통합원장_양식.csv", L.CSV_HEAD.join(",") + "\n" + today() + ",스마트스토어,샐리브 안심퀸 프리미엄,120000,2,30000,90000\n"); });
+    $("dl-ledger").addEventListener("click", function () { if (!summary()) { alertBox("원장이 비어 있습니다."); return; } save("통합원장_" + summary().last + ".csv", ledgerCsv()); });
+    $("cost-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var amt = L.num($("c-amount").value), st = $("c-status");
+      if (!db || !canWrite) { st.textContent = "저장 권한이 없습니다."; return; }
+      if (!$("c-date").value || amt <= 0) { st.textContent = "날짜와 금액(0보다 큰 숫자)을 적어 주세요."; return; }
+      $("c-save").disabled = true;
+      try { await db.collection("costs").add({ date: $("c-date").value, channel: $("c-channel").value, kind: $("c-kind").value, product: $("c-product").value.trim(), amount: amt, memo: $("c-memo").value.trim(), createdAt: new Date().toISOString() }); st.textContent = won(amt) + " 저장했습니다."; $("c-amount").value = ""; $("c-memo").value = ""; }
+      catch (err) { st.textContent = "저장하지 못했습니다. 다시 눌러 주세요."; }
+      finally { $("c-save").disabled = false; }
+    });
+    $("promo-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var st = $("p-status");
+      if (!db || !canWrite) { st.textContent = "저장 권한이 없습니다."; return; }
+      if (!$("p-name").value.trim()) { st.textContent = "홍보명을 적어 주세요."; return; }
+      $("p-save").disabled = true;
+      try { await db.collection("promos").add({ name: $("p-name").value.trim(), channel: $("p-channel").value, product: $("p-product").value.trim(), start: $("p-start").value, monthly: L.num($("p-monthly").value), owner: $("p-owner").value.trim(), active: true, createdAt: new Date().toISOString() }); st.textContent = "추가했습니다."; $("p-name").value = ""; $("p-monthly").value = ""; }
+      catch (err) { st.textContent = "저장하지 못했습니다. 다시 눌러 주세요."; }
+      finally { $("p-save").disabled = false; }
+    });
+    $("be-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var v = { all: L.num($("be-all").value), naver: L.num($("be-naver").value), coupang: L.num($("be-coupang").value) };
+      if (!(v.all > 0 && v.naver > 0 && v.coupang > 0)) { $("be-status").textContent = "세 칸 모두 0보다 큰 숫자로 적어 주세요."; return; }
+      if (!db || !canWrite) { $("be-status").textContent = "저장 권한이 없습니다."; return; }
+      try { await db.doc("settings/main").set(Object.assign(v, { updatedAt: new Date().toISOString() })); $("be-status").textContent = "기준을 저장했습니다."; } catch (err) { $("be-status").textContent = "저장하지 못했습니다."; }
+    });
+  }
+
+  function subscribe() {
+    var timer = setTimeout(function () { if (!state.loaded.ledger) $("fresh").textContent = "저장된 자료에 아직 연결하지 못했습니다. 인터넷 연결을 확인해 주세요."; }, 10000);
+    function coll(name, onDocs) {
+      db.collection(name).onSnapshot(function (snap) {
+        onDocs(snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }));
+        if (!snap.metadata.fromCache) state.loaded[name] = true;
+        if (name === "ledger" && state.loaded.ledger) clearTimeout(timer);
+        renderAll();
+      }, function (err) { state.loaded[name] = true; if (name === "ledger") { clearTimeout(timer); $("fresh").textContent = "저장된 자료를 불러오지 못했습니다 (" + err.code + ")."; } });
+    }
+    coll("ledger", function (docs) { state.ledger = {}; docs.forEach(function (d) { state.ledger[d.id] = d; }); });
+    coll("products", function (docs) { state.products = {}; docs.forEach(function (d) { state.products[d.id] = d; }); });
+    coll("admonth", function (docs) { state.admonth = {}; docs.forEach(function (d) { state.admonth[d.month || d.id] = d; }); });
+    coll("costs", function (docs) { state.costs = docs; });
+    coll("promos", function (docs) { state.promos = docs; });
+    coll("tasks", function (docs) { state.tasks = docs.sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; }); });
+    coll("uploads", function (docs) { state.uploads = docs.sort(function (a, b) { return a.at < b.at ? 1 : -1; }); });
+    db.doc("settings/main").onSnapshot(function (s) { state.settings = s.exists ? s.data() : null; renderSettings(); renderStatus(); }, function () {});
+  }
+
+  async function start() {
+    route(); wireForms(); renderSettings(); renderAll();
+    if (!window.claude || !window.claude.use) { $("fresh").textContent = "claude.ai 안에서 열어야 자료가 저장되고 클로드 작업을 쓸 수 있습니다."; return; }
+    var got = await Promise.all([claude.use("db"), claude.use("sample"), claude.use("downloads"), claude.use("user")]);
+    db = got[0]; sample = got[1]; downloads = got[2];
+    var user = got[3];
+    if (user && user.can) { try { var w = await user.can("data.write"); if (w === false) canWrite = false; } catch (e) {} }
+    if (!downloads) { $("dl-template").hidden = true; $("dl-ledger").hidden = true; }
+    if (!db) { $("fresh").textContent = "저장 기능에 연결하지 못했습니다. 로그인 상태를 확인해 주세요."; return; }
+    if (!canWrite) document.querySelectorAll("#view-data button, #view-data input, #view-data select").forEach(function (x) { x.disabled = true; });
+    subscribe();
+  }
+  start();
+})();
+</script>
